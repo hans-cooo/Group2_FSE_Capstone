@@ -1,0 +1,161 @@
+services:
+  # ============================================================================
+  # 1. ORACLE DATABASE (Master System of Record & Pessimistic Row Locking)
+  # ============================================================================
+  oracle-core-db:
+    image: gvenzl/oracle-free:latest
+    container_name: oracle-core-db
+    ports:
+      - "${ORACLE_PORT:-1521}:1521"
+      - "${ORACLE_OEM_PORT:-5500}:5500"
+    environment:
+      ORACLE_PASSWORD: ${ORACLE_PASSWORD:-SysPassword123!}
+      APP_USER: ${APP_USER:-core_user}
+      APP_USER_PASSWORD: ${APP_USER_PASSWORD:-CorePassword123!}
+      ORACLE_DATABASE: ${ORACLE_DATABASE:-XEPDB1}
+    volumes:
+      - ./database/oracle:/container-entrypoint-initdb.d:ro
+      - oracle_data:/opt/oracle/oradata
+    healthcheck:
+      test: ["CMD-SHELL", "echo 'SELECT 1 FROM DUAL;' | sqlplus -s ${APP_USER:-core_user}/${APP_USER_PASSWORD:-CorePassword123!}@localhost:1521/${ORACLE_DATABASE:-XEPDB1} || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - core-banking-net
+
+  # ============================================================================
+  # 2. POSTGRESQL (Immutable Forensic Audit Store & SHA-256 Hash Chaining)
+  # ============================================================================
+  postgres-audit-db:
+    image: postgres:16-alpine
+    container_name: postgres-audit-db
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-AuditPassword123!}
+      POSTGRES_DB: ${POSTGRES_DB:-audit_store}
+    volumes:
+      - ./database/postgres:/docker-entrypoint-initdb.d:ro
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-audit_store}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    networks:
+      - core-banking-net
+
+  # ============================================================================
+  # 3. REDIS (Distributed Idempotency Pre-flight Lock & Balance Cache)
+  # ============================================================================
+  redis-cache:
+    image: redis:7.4-alpine
+    container_name: redis-cache
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - core-banking-net
+
+  # ============================================================================
+  # 4. APACHE KAFKA (KRaft Mode Single Broker Event Streaming)
+  # ============================================================================
+  kafka-broker:
+    image: apache/kafka:latest
+    container_name: kafka-broker
+    ports:
+      - "${KAFKA_PORT:-9092}:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,INTERNAL://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,INTERNAL://kafka-broker:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka-broker:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_LOG_FLUSH_INTERVAL_MESSAGES: 1
+      CLUSTER_ID: ${KAFKA_CLUSTER_ID:-4L62EnNxTQl-GHmeeAhCwA}
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 15s
+    restart: unless-stopped
+    networks:
+      - core-banking-net
+
+  # ============================================================================
+  # 5. KAFKA TOPIC INITIALIZER (Auto-creates domain topics on boot)
+  # ============================================================================
+  kafka-init-topics:
+    image: apache/kafka:latest
+    container_name: kafka-init-topics
+    depends_on:
+      kafka-broker:
+        condition: service_healthy
+    entrypoint: ["/bin/bash"]
+    command:
+      - "-c"
+      - |
+        echo "Creating core banking topics..."
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka-broker:29092 --create --if-not-exists --topic ledger.mutation.completed.v1 --partitions 3 --replication-factor 1
+        echo "Available topics:"
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka-broker:29092 --list
+    networks:
+      - core-banking-net
+
+  # ============================================================================
+  # 6. KAFKA UI (Browser-based Visual Inspection for Topics & Consumer Groups)
+  # ============================================================================
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    ports:
+      - "${KAFKA_UI_PORT:-8085}:8080"
+    depends_on:
+      kafka-broker:
+        condition: service_healthy
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local-core-banking-cluster
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka-broker:29092
+      DYNAMIC_CONFIG_ENABLED: "true"
+    restart: unless-stopped
+    networks:
+      - core-banking-net
+
+# ==============================================================================
+# VOLUMES & NETWORKS
+# ==============================================================================
+volumes:
+  oracle_data:
+    driver: local
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  kafka_data:
+    driver: local
+
+networks:
+  core-banking-net:
+    driver: bridge
