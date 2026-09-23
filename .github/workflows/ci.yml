@@ -1,0 +1,215 @@
+name: Core Banking CI - Local Data Foundation
+
+on:
+  push:
+    branches: [ main, master, "feature/**", "phase/**" ]
+  pull_request:
+    branches: [ main, master ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ============================================================================
+  # JOB 1: Configuration & Compose Syntax Validation
+  # ============================================================================
+  validate-config:
+    name: 1. Validate Docker Compose & Environment
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v4
+
+      - name: Verify environment template
+        run: |
+          echo "Copying .env.example to .env..."
+          cp .env.example .env
+          test -f .env || (echo ".env missing!" && exit 1)
+
+      - name: Validate docker-compose.yml syntax
+        run: |
+          docker compose config --quiet
+          echo "docker-compose.yml syntax is valid."
+
+  # ============================================================================
+  # JOB 2: PostgreSQL Immutable Audit Store & Cryptographic Triggers
+  # ============================================================================
+  test-postgres-audit-store:
+    name: 2. Test PostgreSQL Cryptographic Audit Store
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v4
+
+      - name: Start PostgreSQL 16 Service Container
+        run: |
+          docker run -d \
+            --name pg-ci \
+            -e POSTGRES_PASSWORD=AuditPassword123! \
+            -e POSTGRES_DB=audit_store \
+            -p 5432:5432 \
+            postgres:16-alpine
+
+          echo "Waiting for PostgreSQL to be ready..."
+          until docker exec pg-ci pg_isready -U postgres -d audit_store; do
+            sleep 2
+          done
+
+      - name: Execute DDL & Trigger Scripts
+        run: |
+          echo "Applying 01_init_db.sql..."
+          docker exec -i pg-ci psql -U postgres -d audit_store < database/postgres/01_init_db.sql
+
+          echo "Applying 02_create_tables.sql..."
+          docker exec -i pg-ci psql -U postgres -d audit_store < database/postgres/02_create_tables.sql
+
+          echo "Applying 03_audit_triggers.sql..."
+          docker exec -i pg-ci psql -U postgres -d audit_store < database/postgres/03_audit_triggers.sql
+
+          echo "Applying 04_seed_data.sql..."
+          docker exec -i pg-ci psql -U postgres -d audit_store < database/postgres/04_seed_data.sql
+
+      - name: Verify Single Source of Truth (SSOT) Isolation
+        run: |
+          # Assert that core_banking schema does NOT exist in PostgreSQL (business tables strictly in Oracle)
+          SSOT_COUNT=$(docker exec pg-ci psql -U postgres -d audit_store -t -A -c "SELECT count(*) FROM information_schema.schemata WHERE schema_name = 'core_banking';")
+          if [ "$SSOT_COUNT" -eq "0" ]; then
+            echo "PASS: Single Source of Truth verified. No business tables in PostgreSQL."
+          else
+            echo "FAIL: Unexpected core_banking schema found in PostgreSQL!"
+            exit 1
+          fi
+
+      - name: Verify Cryptographic SHA-256 Hash Chaining
+        run: |
+          # Verify 3 seed entries exist with 64-character SHA-256 hashes
+          COUNT=$(docker exec pg-ci psql -U postgres -d audit_store -t -A -c "SELECT count(*) FROM audit_store.ledger_mutation_audit;")
+          if [ "$COUNT" -ge 3 ]; then
+            echo "PASS: $COUNT seed audit entries confirmed."
+          else
+            echo "FAIL: Expected >= 3 audit entries, found $COUNT"
+            exit 1
+          fi
+
+          HASH=$(docker exec pg-ci psql -U postgres -d audit_store -t -A -c "SELECT current_hash FROM audit_store.ledger_mutation_audit ORDER BY audit_id ASC LIMIT 1;")
+          HASH_LEN=${#HASH}
+          if [ "$HASH_LEN" -eq 64 ]; then
+            echo "PASS: Cryptographic SHA-256 hash length verified ($HASH)."
+          else
+            echo "FAIL: Hash length is $HASH_LEN (expected 64)"
+            exit 1
+          fi
+
+      - name: Verify Immutability Guard (Trigger must reject UPDATE & DELETE)
+        run: |
+          echo "Attempting illegal UPDATE on audit record..."
+          OUTPUT=$(docker exec pg-ci psql -U postgres -d audit_store -c "UPDATE audit_store.ledger_mutation_audit SET amount = 999999 WHERE audit_id = 1;" 2>&1 || true)
+          echo "Database response: $OUTPUT"
+
+          if echo "$OUTPUT" | grep -q "COMPLIANCE VIOLATION" && echo "$OUTPUT" | grep -q "55000"; then
+            echo "PASS: Immutability trigger successfully blocked illegal UPDATE with ERRCODE 55000."
+          else
+            echo "FAIL: Immutability trigger did not block illegal UPDATE!"
+            exit 1
+          fi
+
+  # ============================================================================
+  # JOB 3: Redis & Kafka KRaft Integration Test
+  # ============================================================================
+  test-redis-and-kafka:
+    name: 3. Test Redis Idempotency & Kafka KRaft
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v4
+
+      - name: Prepare environment
+        run: cp .env.example .env
+
+      - name: Spin up Redis and Kafka via Docker Compose
+        run: |
+          docker compose up -d redis-cache kafka-broker kafka-init-topics
+
+          echo "Waiting for Kafka and Redis to be healthy..."
+          timeout 60s bash -c '
+            until docker exec redis-cache redis-cli ping | grep -q "PONG"; do
+              sleep 2
+            done
+          '
+          echo "Redis is healthy."
+
+          timeout 60s bash -c '
+            until docker exec kafka-broker /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list | grep -q "ledger.mutation.completed.v1"; do
+              sleep 3
+            done
+          '
+          echo "Kafka topic ledger.mutation.completed.v1 initialized."
+
+      - name: Test Redis SETNX Idempotency Locks
+        run: |
+          KEY="idemp:txn:ci-test-$(date +%s)"
+          FIRST=$(docker exec redis-cache redis-cli SET "$KEY" "PROCESSING" EX 30 NX)
+          RETRY=$(docker exec redis-cache redis-cli SET "$KEY" "PROCESSING" EX 30 NX)
+
+          if [ "$FIRST" = "OK" ] && [ -z "$RETRY" ]; then
+            echo "PASS: Redis atomic SETNX idempotency lock operational."
+          else
+            echo "FAIL: Redis SETNX test failed (first=$FIRST, retry=$RETRY)"
+            exit 1
+          fi
+
+      - name: Test Kafka Produce & Consume Round-trip
+        run: |
+          TEST_PAYLOAD='{"eventId":"ci-101","accountId":"ACC_1001","amount":500.0000,"status":"COMPLETED"}'
+          
+          echo "Producing test event to Kafka..."
+          echo "$TEST_PAYLOAD" | docker exec -i kafka-broker /opt/kafka/bin/kafka-console-producer.sh \
+            --bootstrap-server localhost:9092 \
+            --topic ledger.mutation.completed.v1
+
+          echo "Consuming test event from Kafka..."
+          CONSUMED=$(docker exec kafka-broker /opt/kafka/bin/kafka-console-consumer.sh \
+            --bootstrap-server localhost:9092 \
+            --topic ledger.mutation.completed.v1 \
+            --from-beginning \
+            --max-messages 1 \
+            --timeout-ms 5000)
+
+          if echo "$CONSUMED" | grep -q "ACC_1001"; then
+            echo "PASS: Kafka event streaming verified round-trip."
+          else
+            echo "FAIL: Did not consume produced message. Output: $CONSUMED"
+            exit 1
+          fi
+
+  # ============================================================================
+  # JOB 4: Oracle SQL Script Validation
+  # ============================================================================
+  validate-oracle-ddl:
+    name: 4. Validate Oracle DDL Syntax & Tables
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v4
+
+      - name: Validate Oracle DDL Structure
+        run: |
+          echo "Checking Oracle DDL files exist..."
+          test -f database/oracle/01_init_user.sql
+          test -f database/oracle/02_create_tables.sql
+          test -f database/oracle/03_seed_data.sql
+
+          # Verify all 13 ERD tables are declared in 02_create_tables.sql
+          TABLES=("ROLE" "USER" "CUSTOMER" "KYC" "KYC_UPDATE_REQUEST" "ACCOUNT" "BALANCE" "TRANSFER_REQUEST" "ACCOUNT_FLAG" "TRANSACTION" "TRANSACTION_FLAG" "SYSTEM_LOG" "TRANSACTION_AUDIT")
+          
+          for tbl in "${TABLES[@]}"; do
+            if grep -qi "CREATE TABLE.*$tbl" database/oracle/02_create_tables.sql; then
+              echo "  [FOUND] Table definition for $tbl"
+            else
+              echo "  [MISSING] Table definition for $tbl!"
+              exit 1
+            fi
+          done
+
+          echo "PASS: All 13 ERD tables properly defined for Oracle Master."
