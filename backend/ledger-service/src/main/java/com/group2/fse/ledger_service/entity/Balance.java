@@ -1,17 +1,19 @@
 package com.group2.fse.ledger_service.entity;
 
+import jakarta.persistence.*;
+import lombok.*;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import java.util.Objects;
 
 @Entity
 @Table(name = "BALANCE")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class Balance {
 
     @Id
@@ -19,44 +21,57 @@ public class Balance {
     @Column(name = "balance_id")
     private Long balanceId;
 
-    @Column(name = "account_id", nullable = false)
-    private Long accountId;
+    @OneToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "account_id", nullable = false, unique = true)
+    private Account account;
 
-    @Column(name = "available_balance", nullable = false, precision = 18, scale = 4)
-    private BigDecimal availableBalance;
+    @Builder.Default
+    @Column(name = "available_balance", precision = 18, scale = 4, nullable = false)
+    private BigDecimal availableBalance = BigDecimal.ZERO.setScale(4);
 
-    @Column(name = "updated_at")
-    private LocalDateTime updatedAt;
+    @Version
+    @Builder.Default
+    @Column(name = "version", nullable = false)
+    private Long version = 0L;
 
-    public Long getBalanceId() {
-        return balanceId;
+    @Builder.Default
+    @Column(name = "updated_at", nullable = false)
+    private LocalDateTime updatedAt = LocalDateTime.now();
+
+    @PrePersist
+    @PreUpdate
+    protected void onUpdate() {
+        this.updatedAt = LocalDateTime.now();
+        if (this.availableBalance == null) {
+            this.availableBalance = BigDecimal.ZERO.setScale(4);
+        } else {
+            this.availableBalance = this.availableBalance.setScale(4, java.math.RoundingMode.HALF_UP);
+        }
+        if (this.version == null) {
+            this.version = 0L;
+        }
     }
 
-    public void setBalanceId(Long balanceId) {
-        this.balanceId = balanceId;
+    /**
+     * Domain invariant check: ensures balance never drops below zero
+     */
+    public boolean canDebit(BigDecimal amount) {
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            return false;
+        }
+        return this.availableBalance.compareTo(amount) >= 0;
     }
 
-    public Long getAccountId() {
-        return accountId;
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Balance balance = (Balance) o;
+        return balanceId != null && Objects.equals(balanceId, balance.balanceId);
     }
 
-    public void setAccountId(Long accountId) {
-        this.accountId = accountId;
-    }
-
-    public BigDecimal getAvailableBalance() {
-        return availableBalance;
-    }
-
-    public void setAvailableBalance(BigDecimal availableBalance) {
-        this.availableBalance = availableBalance;
-    }
-
-    public LocalDateTime getUpdatedAt() {
-        return updatedAt;
-    }
-
-    public void setUpdatedAt(LocalDateTime updatedAt) {
-        this.updatedAt = updatedAt;
+    @Override
+    public int hashCode() {
+        return getClass().hashCode();
     }
 }
