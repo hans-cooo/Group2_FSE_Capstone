@@ -38,11 +38,6 @@ public class Account {
     @Column(name = "status", length = 20, nullable = false)
     private String status = "ACTIVE";
 
-    @Version
-    @Builder.Default
-    @Column(name = "version", nullable = false)
-    private Long version = 0L;
-
     @Builder.Default
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
@@ -60,9 +55,6 @@ public class Account {
         }
         if (currency == null) {
             currency = "PHP";
-        }
-        if (version == null) {
-            version = 0L;
         }
     }
 

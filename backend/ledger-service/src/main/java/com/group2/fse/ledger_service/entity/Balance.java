@@ -29,11 +29,6 @@ public class Balance {
     @Column(name = "available_balance", precision = 18, scale = 4, nullable = false)
     private BigDecimal availableBalance = BigDecimal.ZERO.setScale(4);
 
-    @Version
-    @Builder.Default
-    @Column(name = "version", nullable = false)
-    private Long version = 0L;
-
     @Builder.Default
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt = LocalDateTime.now();
@@ -47,9 +42,13 @@ public class Balance {
         } else {
             this.availableBalance = this.availableBalance.setScale(4, java.math.RoundingMode.HALF_UP);
         }
-        if (this.version == null) {
-            this.version = 0L;
-        }
+    }
+
+    /**
+     * Helper getter for account ID
+     */
+    public Long getAccountId() {
+        return account != null ? account.getAccountId() : null;
     }
 
     /**

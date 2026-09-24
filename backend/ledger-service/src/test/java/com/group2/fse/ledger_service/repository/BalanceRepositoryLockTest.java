@@ -59,13 +59,16 @@ class BalanceRepositoryLockTest {
                 return System.currentTimeMillis();
 
             } catch (Exception e) {
-
+                firstLockAcquired.countDown();
                 transactionManager.rollback(tx);
                 throw e;
             }
         });
 
-        firstLockAcquired.await();
+        assertTrue(
+                firstLockAcquired.await(10, java.util.concurrent.TimeUnit.SECONDS),
+                "Thread 1 timed out acquiring initial lock"
+        );
 
         Future<Long> thread2 = executor.submit(() -> {
 

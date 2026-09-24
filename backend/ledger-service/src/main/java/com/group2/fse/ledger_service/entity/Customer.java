@@ -33,11 +33,6 @@ public class Customer {
     @Column(name = "kyc_status", length = 20, nullable = false)
     private String kycStatus = "PENDING";
 
-    @Version
-    @Builder.Default
-    @Column(name = "version", nullable = false)
-    private Long version = 0L;
-
     @Builder.Default
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
@@ -49,9 +44,6 @@ public class Customer {
         }
         if (kycStatus == null) {
             kycStatus = "PENDING";
-        }
-        if (version == null) {
-            version = 0L;
         }
     }
 

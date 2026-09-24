@@ -20,14 +20,12 @@ class EntityMappingTest {
                 .accountType("SAVINGS")
                 .currency("PHP")
                 .status("ACTIVE")
-                .version(0L)
                 .build();
 
         Balance balance = Balance.builder()
                 .balanceId(1L)
                 .account(account)
                 .availableBalance(new BigDecimal("50000.0000"))
-                .version(0L)
                 .updatedAt(LocalDateTime.now())
                 .build();
 
@@ -99,7 +97,6 @@ class EntityMappingTest {
                 .passwordHash("$2a$10$hashedpassword")
                 .email("john@example.com")
                 .kycStatus("VERIFIED")
-                .version(0L)
                 .build();
 
         Kyc kyc = Kyc.builder()

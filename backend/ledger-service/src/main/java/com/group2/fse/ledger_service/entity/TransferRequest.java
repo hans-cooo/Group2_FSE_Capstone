@@ -46,9 +46,8 @@ public class TransferRequest {
     @JoinColumn(name = "approved_by")
     private User approvedBy;
 
-    @Version
+    @Transient
     @Builder.Default
-    @Column(name = "version", nullable = false)
     private Long version = 0L;
 
     @Builder.Default
