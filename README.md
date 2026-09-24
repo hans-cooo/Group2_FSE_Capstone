@@ -36,8 +36,8 @@ The script will automatically:
 
 | Service | Technology | Host Port | Database / PDB | Default User | Default Password | Purpose |
 |---|---|:---:|---|---|---|---|
-| **`oracle-core-db`** | Oracle Database Free / 21c XE | `1521` | `XEPDB1` | `core_user` | `CorePassword123!` | System of Record, Master Balances, Pessimistic Row Locking (`SELECT FOR UPDATE`) |
-| **`postgres-audit-db`** | PostgreSQL 16 | `5432` | `audit_store` | `postgres` | `AuditPassword123!` | Immutable Forensic Audit Store, SHA-256 Hash Chained Journal, Read Query Path |
+| **`oracle-core-db`** | Oracle Database Free / 21c XE | `1522` | `XEPDB1` | `core_user` | `CorePassword123!` | System of Record, Master Balances, Pessimistic Row Locking (`SELECT FOR UPDATE`) |
+| **`postgres-audit-db`** | PostgreSQL 16 | `5434` | `audit_store` | `postgres` | `AuditPassword123!` | Immutable Forensic Audit Store, SHA-256 Hash Chained Journal, Read Query Path |
 | **`redis-cache`** | Redis 7.4 Alpine | `6379` | `db 0` | *(none)* | *(none)* | Sub-2ms Distributed Idempotency Pre-flight Lock (`SETNX`) & Balance Read Cache |
 | **`kafka-broker`** | Apache Kafka 3.8.0 (KRaft) | `9092` | *(broker)* | *(plaintext)* | *(none)* | Asynchronous Event Streaming Backbone (`ledger.mutation.completed.v1`) |
 | **`kafka-ui`** | Provectus Kafka UI | `8085` | `local-cluster` | *(web)* | *(none)* | Visual browser dashboard for topics, messages, consumer groups |
