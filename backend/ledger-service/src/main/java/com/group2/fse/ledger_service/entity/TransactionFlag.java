@@ -1,0 +1,71 @@
+package com.group2.fse.ledger_service.entity;
+
+import jakarta.persistence.*;
+import lombok.*;
+
+import java.time.LocalDateTime;
+import java.util.Objects;
+
+@Entity
+@Table(name = "TRANSACTION_FLAG")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class TransactionFlag {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "flag_id")
+    private Long flagId;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "transaction_id", nullable = false)
+    private Transaction transaction;
+
+    @Column(name = "reason", length = 255, nullable = false)
+    private String reason;
+
+    @Builder.Default
+    @Column(name = "status", length = 20, nullable = false)
+    private String status = "FLAGGED";
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "flagged_by", nullable = false)
+    private User flaggedBy;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "removed_by")
+    private User removedBy;
+
+    @Builder.Default
+    @Column(name = "flagged_at", nullable = false, updatable = false)
+    private LocalDateTime flaggedAt = LocalDateTime.now();
+
+    @Column(name = "removed_at")
+    private LocalDateTime removedAt;
+
+    @PrePersist
+    protected void onCreate() {
+        if (flaggedAt == null) {
+            flaggedAt = LocalDateTime.now();
+        }
+        if (status == null) {
+            status = "FLAGGED";
+        }
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        TransactionFlag that = (TransactionFlag) o;
+        return flagId != null && Objects.equals(flagId, that.flagId);
+    }
+
+    @Override
+    public int hashCode() {
+        return getClass().hashCode();
+    }
+}
