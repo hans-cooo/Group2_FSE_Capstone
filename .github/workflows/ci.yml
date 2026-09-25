@@ -272,13 +272,43 @@ jobs:
           '
           echo "PostgreSQL is healthy."
 
-          echo "Waiting for Oracle Database to become healthy..."
-          timeout 120s bash -c '
-            until docker exec oracle-core-db bash -c "echo '\''SELECT 1 FROM DUAL;'\'' | sqlplus -s core_user/CorePassword123!@localhost:1521/XEPDB1" | grep -q "1"; do
-              sleep 4
+      - name: Wait for Oracle XEPDB1 service registration
+        run: |
+          set -e
+          echo "Waiting for Oracle XE listener to register XEPDB1 service..."
+
+          timeout 180s bash -c '
+            until docker exec oracle-core-db bash -lc "
+              lsnrctl services 2>/dev/null | grep -q \"Service.*XEPDB1\"
+            "; do
+              echo "XEPDB1 is not registered with listener yet..."
+              sleep 5
             done
           '
-          echo "Oracle XE 21c is healthy and responsive."
+
+          echo "Waiting for XEPDB1 to accept SQL queries..."
+          timeout 60s bash -c '
+            until docker exec oracle-core-db bash -lc "
+              printf \"SELECT 1 FROM dual;\\nEXIT;\\n\" |
+              sqlplus -s core_user/CorePassword123!@//localhost:1521/XEPDB1 |
+              grep -Eq \"^[[:space:]]*1[[:space:]]*$\"
+            "; do
+              echo "XEPDB1 is registered but not accepting queries yet..."
+              sleep 5
+            done
+          '
+
+          echo "Oracle XE XEPDB1 is ready."
+
+      - name: Verify Oracle port reachable from runner host
+        run: |
+          timeout 60s bash -c '
+            until nc -z 127.0.0.1 1521; do
+              echo "Waiting for port 1521 on runner..."
+              sleep 2
+            done
+          '
+          echo "Oracle port 1521 is reachable from the GitHub runner."
 
       - name: Compile and Run Full Backend Test Suite
         run: |

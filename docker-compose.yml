@@ -17,11 +17,11 @@ services:
       - ./database/oracle:/container-entrypoint-initdb.d:ro
       - oracle_data:/opt/oracle/oradata
     healthcheck:
-      test: ["CMD-SHELL", "echo 'SELECT 1 FROM DUAL;' | sqlplus -s ${APP_USER:-core_user}/${APP_USER_PASSWORD:-CorePassword123!}@localhost:1521/${ORACLE_DATABASE:-XEPDB1} || exit 1"]
+      test: ["CMD-SHELL", "printf 'SELECT 1 FROM dual;\\nEXIT;\\n' | sqlplus -s ${APP_USER:-core_user}/${APP_USER_PASSWORD:-CorePassword123!}@//localhost:1521/${ORACLE_DATABASE:-XEPDB1} | grep -Eq '^[[:space:]]*1[[:space:]]*$' || exit 1"]
       interval: 10s
-      timeout: 5s
-      retries: 30
-      start_period: 30s
+      timeout: 10s
+      retries: 25
+      start_period: 60s
     restart: unless-stopped
     networks:
       - core-banking-net
