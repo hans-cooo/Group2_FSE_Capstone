@@ -178,8 +178,23 @@ CREATE TABLE TRANSACTION_AUDIT (
     CONSTRAINT fk_txnaudit_account FOREIGN KEY (account_id) REFERENCES ACCOUNT(account_id)
 );
 
+-- 14. ACCOUNT CLOSURE REQUEST TABLE
+CREATE TABLE ACCOUNT_CLOSURE_REQUEST (
+    closure_request_id NUMBER(19) GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    account_id NUMBER(19) NOT NULL,
+    reason VARCHAR2(255),
+    status VARCHAR2(20) DEFAULT 'PENDING' NOT NULL,
+    approved_by NUMBER(19),
+    rejection_reason VARCHAR2(255),
+    requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    reviewed_at TIMESTAMP,
+    CONSTRAINT fk_closure_req_acc FOREIGN KEY (account_id) REFERENCES ACCOUNT(account_id),
+    CONSTRAINT fk_closure_req_user FOREIGN KEY (approved_by) REFERENCES "USER"(user_id)
+);
+
 -- PERFORMANCE & QUERY INDEXES (Unique columns already have automatic unique indexes)
 CREATE INDEX idx_account_customer ON ACCOUNT(customer_id);
 CREATE INDEX idx_txn_account ON "TRANSACTION"(account_id);
 CREATE INDEX idx_txn_created_at ON "TRANSACTION"(created_at);
 CREATE INDEX idx_transfer_src_dst ON TRANSFER_REQUEST(source_account_id, destination_account_id);
+CREATE INDEX idx_closure_req_acc ON ACCOUNT_CLOSURE_REQUEST(account_id);

@@ -47,7 +47,7 @@ The script will automatically:
 
 ## 3. Database Schemas & DDL Architecture
 
-All 13 tables from the approved Capstone ERD are defined and initialized:
+All 14 tables from the approved Capstone ERD are defined and initialized:
 
 ```mermaid
 erDiagram
@@ -55,6 +55,7 @@ erDiagram
     USER ||--o{ KYC_UPDATE_REQUEST : approves
     USER ||--o{ SYSTEM_LOG : creates
     USER ||--o{ TRANSFER_REQUEST : approves
+    USER ||--o{ ACCOUNT_CLOSURE_REQUEST : approves
     USER ||--o{ ACCOUNT_FLAG : flags
     USER ||--o{ TRANSACTION : approves
     USER ||--o{ TRANSACTION_FLAG : flags
@@ -63,6 +64,7 @@ erDiagram
     KYC ||--o{ KYC_UPDATE_REQUEST : updates
     ACCOUNT ||--|| BALANCE : has
     ACCOUNT ||--o{ TRANSFER_REQUEST : source_destination
+    ACCOUNT ||--o{ ACCOUNT_CLOSURE_REQUEST : closed_via
     ACCOUNT ||--o{ ACCOUNT_FLAG : flagged
     ACCOUNT ||--o{ TRANSACTION : records
     ACCOUNT ||--o{ TRANSACTION_AUDIT : audited
@@ -73,7 +75,7 @@ erDiagram
 ### Data Architecture & Single Source of Truth (SSOT)
 
 To strictly adhere to enterprise banking standards and avoid data drift / split-brain hazards:
-- **Oracle XE (`core_user` in `XEPDB1`)**: Serves as the **Exclusive Master System of Record (SoR)** holding all 13 core business and operational tables.
+- **Oracle XE (`core_user` in `XEPDB1`)**: Serves as the **Exclusive Master System of Record (SoR)** holding all 14 core business and operational tables.
 - **PostgreSQL (`audit_store`)**: Serves as the **Segregated Immutable Forensic Audit Store** holding exclusively `audit_store.ledger_mutation_audit`.
 
 ### Master Operational Tables (Oracle Exclusive)
@@ -90,6 +92,7 @@ To strictly adhere to enterprise banking standards and avoid data drift / split-
 11. **`TRANSACTION_FLAG`**: Fraud / AML inspection flags on specific transaction events.
 12. **`SYSTEM_LOG`**: Operational activity and microservice audit log.
 13. **`TRANSACTION_AUDIT`**: Mirror audit ledger.
+14. **`ACCOUNT_CLOSURE_REQUEST`**: Customer-initiated closure workflow. Validates zero balance ($0.0000) and requires admin approval to transition ACCOUNT status to CLOSED, leaving the CUSTOMER entity intact.
 
 ### Immutable Audit Store (PostgreSQL Exclusive)
 - **`audit_store.ledger_mutation_audit`**:

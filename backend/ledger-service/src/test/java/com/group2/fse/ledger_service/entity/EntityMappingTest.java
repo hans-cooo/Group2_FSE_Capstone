@@ -115,4 +115,35 @@ class EntityMappingTest {
         assertEquals("john_doe", kyc.getCustomer().getUsername());
         assertEquals("VERIFIED", kyc.getStatus());
     }
+
+    @Test
+    @DisplayName("Verify AccountClosureRequest entity mapping and lifecycle")
+    void testAccountClosureRequestEntityMapping() {
+        Account account = Account.builder()
+                .accountId(1L)
+                .accountNumber("ACC_10000001")
+                .status("ACTIVE")
+                .build();
+
+        User admin = User.builder()
+                .userId(1L)
+                .username("admin")
+                .build();
+
+        AccountClosureRequest request = AccountClosureRequest.builder()
+                .closureRequestId(99L)
+                .account(account)
+                .reason("No longer needed")
+                .status("PENDING")
+                .approvedBy(admin)
+                .requestedAt(LocalDateTime.now())
+                .build();
+
+        assertNotNull(request);
+        assertEquals(99L, request.getClosureRequestId());
+        assertEquals("PENDING", request.getStatus());
+        assertEquals("No longer needed", request.getReason());
+        assertEquals(1L, request.getAccount().getAccountId());
+        assertEquals("admin", request.getApprovedBy().getUsername());
+    }
 }
