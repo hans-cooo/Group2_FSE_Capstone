@@ -8,6 +8,7 @@ public class MutationResult {
     private boolean success;
     private String referenceNo;
     private Long accountId;
+    private Long transactionId;
     private BigDecimal previousBalance;
     private BigDecimal newBalance;
     private BigDecimal mutatedAmount;
@@ -21,10 +22,17 @@ public class MutationResult {
     public static MutationResult success(Long accountId, String referenceNo, 
                                           BigDecimal previousBalance, BigDecimal newBalance, 
                                           BigDecimal mutatedAmount) {
+        return success(accountId, referenceNo, null, previousBalance, newBalance, mutatedAmount);
+    }
+
+    public static MutationResult success(Long accountId, String referenceNo, Long transactionId,
+                                          BigDecimal previousBalance, BigDecimal newBalance, 
+                                          BigDecimal mutatedAmount) {
         MutationResult res = new MutationResult();
         res.success = true;
         res.accountId = accountId;
         res.referenceNo = referenceNo;
+        res.transactionId = transactionId;
         res.previousBalance = previousBalance;
         res.newBalance = newBalance;
         res.mutatedAmount = mutatedAmount;
@@ -64,6 +72,14 @@ public class MutationResult {
 
     public void setAccountId(Long accountId) {
         this.accountId = accountId;
+    }
+
+    public Long getTransactionId() {
+        return transactionId;
+    }
+
+    public void setTransactionId(Long transactionId) {
+        this.transactionId = transactionId;
     }
 
     public BigDecimal getPreviousBalance() {

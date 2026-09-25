@@ -1,0 +1,140 @@
+package com.group2.fse.ledger_service.service;
+
+import java.math.BigDecimal;
+
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import org.mockito.MockitoAnnotations;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.jdbc.CannotGetJdbcConnectionException;
+import org.springframework.jdbc.core.JdbcTemplate;
+
+import com.group2.fse.ledger_service.exception.DualWriteAuditException;
+
+@DisplayName("DualWriteLedgerAuditService Unit Tests (FSE-304 & FSE-305)")
+class DualWriteLedgerAuditServiceTest {
+
+    @Mock
+    private JdbcTemplate auditJdbcTemplate;
+
+    @InjectMocks
+    private DualWriteLedgerAuditService auditService;
+
+    @BeforeEach
+    void setUp() {
+        MockitoAnnotations.openMocks(this);
+    }
+
+    @Test
+    @DisplayName("FSE-304: Successfully executes SQL insert into PostgreSQL audit store")
+    void testRecordMutationAudit_Success() {
+        when(auditJdbcTemplate.update(
+                eq(DualWriteLedgerAuditService.INSERT_AUDIT_SQL),
+                eq(101L),
+                eq(1L),
+                eq("DEBIT"),
+                eq(new BigDecimal("2500.0000")),
+                eq(new BigDecimal("10000.0000")),
+                eq(new BigDecimal("7500.0000")),
+                eq(99L),
+                eq("192.168.1.100")
+        )).thenReturn(1);
+
+        assertDoesNotThrow(() ->
+                auditService.recordMutationAudit(
+                        101L,
+                        1L,
+                        "DEBIT",
+                        new BigDecimal("2500.0000"),
+                        new BigDecimal("10000.0000"),
+                        new BigDecimal("7500.0000"),
+                        99L,
+                        "192.168.1.100"
+                )
+        );
+
+        verify(auditJdbcTemplate, times(1)).update(
+                eq(DualWriteLedgerAuditService.INSERT_AUDIT_SQL),
+                any(), any(), any(), any(), any(), any(), any(), any()
+        );
+    }
+
+    @Test
+    @DisplayName("FSE-305: Connection failure throws DualWriteAuditException to trigger rollback")
+    void testRecordMutationAudit_ConnectionFailure_ThrowsException() {
+        when(auditJdbcTemplate.update(any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenThrow(new CannotGetJdbcConnectionException("Failed to obtain JDBC Connection to PostgreSQL"));
+
+        DualWriteAuditException ex = assertThrows(DualWriteAuditException.class, () ->
+                auditService.recordMutationAudit(
+                        102L,
+                        1L,
+                        "DEBIT",
+                        new BigDecimal("500.0000"),
+                        new BigDecimal("2000.0000"),
+                        new BigDecimal("1500.0000"),
+                        null,
+                        null
+                )
+        );
+
+        assertTrue(ex.getMessage().contains("PostgreSQL audit store write failed"));
+        assertTrue(ex.getCause() instanceof CannotGetJdbcConnectionException);
+    }
+
+    @Test
+    @DisplayName("FSE-305: Constraint violation or trigger failure throws DualWriteAuditException")
+    void testRecordMutationAudit_ConstraintViolation_ThrowsException() {
+        when(auditJdbcTemplate.update(any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenThrow(new DataIntegrityViolationException("COMPLIANCE VIOLATION: Hash mismatch"));
+
+        DualWriteAuditException ex = assertThrows(DualWriteAuditException.class, () ->
+                auditService.recordMutationAudit(
+                        103L,
+                        2L,
+                        "CREDIT",
+                        new BigDecimal("1000.0000"),
+                        new BigDecimal("500.0000"),
+                        new BigDecimal("1500.0000"),
+                        1L,
+                        "127.0.0.1"
+                )
+        );
+
+        assertTrue(ex.getMessage().contains("COMPLIANCE VIOLATION"));
+    }
+
+    @Test
+    @DisplayName("FSE-305: Zero rows affected throws DualWriteAuditException")
+    void testRecordMutationAudit_ZeroRowsAffected_ThrowsException() {
+        when(auditJdbcTemplate.update(any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(0);
+
+        DualWriteAuditException ex = assertThrows(DualWriteAuditException.class, () ->
+                auditService.recordMutationAudit(
+                        104L,
+                        3L,
+                        "DEBIT",
+                        new BigDecimal("100.0000"),
+                        new BigDecimal("300.0000"),
+                        new BigDecimal("200.0000"),
+                        null,
+                        "127.0.0.1"
+                )
+        );
+
+        assertEquals("Audit record insertion affected 0 rows, expected 1.", ex.getMessage());
+    }
+}
