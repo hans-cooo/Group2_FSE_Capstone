@@ -90,5 +90,11 @@ dump.rdb
 Agents.md
 
 CAPSTONE FSE.docx
+*.docx
+*.doc
+*.xlsx
+*.pptx
+generate_report*.py
 docs/
+
 
