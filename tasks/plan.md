@@ -86,15 +86,15 @@ The implementation covers:
 ---
 
 ### Phase 3: Production REST Controllers & RFC-7807 Global Exception Advice
-- [ ] Task 3.1: Global Exception Handler Advice (`GlobalExceptionHandler`)
-- [ ] Task 3.2: Authoritative Balance Mutations Controller (`LedgerMutationController`)
-- [ ] Task 3.3: Atomic Fund Transfer Controller (`LedgerTransferController`)
-- [ ] Task 3.4: High-Speed Cached Balance Controller (`BalanceController`)
+- [x] Task 3.1: Global Exception Handler Advice (`GlobalExceptionHandler`)
+- [x] Task 3.2: Authoritative Balance Mutations Controller (`LedgerMutationController`)
+- [x] Task 3.3: Atomic Fund Transfer Controller (`LedgerTransferController`)
+- [x] Task 3.4: High-Speed Cached Balance Controller (`BalanceController`)
 
 ### Checkpoint 3: REST Layer Verified
-- [ ] Endpoints `/api/v1/ledger/debit`, `/credit`, `/transfer`, `/balance/{accountId}` functional.
-- [ ] Both singular and plural endpoints routed properly.
-- [ ] Validation errors and domain errors return RFC-7807 compliant problem envelopes.
+- [x] Endpoints `/api/v1/ledger/debit`, `/credit`, `/transfer`, `/balance/{accountId}` functional.
+- [x] Both singular and plural endpoints routed properly.
+- [x] Validation errors and domain errors return RFC-7807 compliant problem envelopes.
 
 ---
 

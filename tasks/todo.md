@@ -195,13 +195,13 @@
 ### Task 3.1: Global Exception Handler Advice
 **Description:** Implement `GlobalExceptionHandler` (`@RestControllerAdvice`) translating domain exceptions to RFC-7807 `application/problem+json` error envelopes.
 **Acceptance criteria:**
-- [ ] Maps `InsufficientFundsException` to HTTP 422 (`INSUFFICIENT_FUNDS`).
-- [ ] Maps `AccountNotFoundException` to HTTP 404 (`ACCOUNT_NOT_FOUND`).
-- [ ] Maps `DuplicateIdempotencyKeyException` to HTTP 409 (`DUPLICATE_IDEMPOTENCY_KEY`).
-- [ ] Maps `MethodArgumentNotValidException` to HTTP 400 (`INVALID_REQUEST_PARAMETERS`).
-- [ ] Maps `OptimisticLockingFailureException` / lock timeouts to HTTP 409 (`CONCURRENT_TRANSACTION_IN_FLIGHT`).
+- [x] Maps `InsufficientFundsException` to HTTP 422 (`INSUFFICIENT_FUNDS`).
+- [x] Maps `AccountNotFoundException` to HTTP 404 (`ACCOUNT_NOT_FOUND`).
+- [x] Maps `DuplicateIdempotencyKeyException` to HTTP 409 (`DUPLICATE_IDEMPOTENCY_KEY`).
+- [x] Maps `MethodArgumentNotValidException` to HTTP 400 (`INVALID_REQUEST_PARAMETERS`).
+- [x] Maps `OptimisticLockingFailureException` / lock timeouts to HTTP 409 (`CONCURRENT_TRANSACTION_IN_FLIGHT`).
 **Verification:**
-- [ ] Tests pass: `./mvnw test -Dtest=GlobalExceptionHandlerTest`
+- [x] Tests pass: `./mvnw test -Dtest=GlobalExceptionHandlerTest`
 **Dependencies:** Task 2.2
 **Files likely touched:**
 - `backend/ledger-service/src/main/java/com/group2/fse/ledger_service/exception/GlobalExceptionHandler.java`
@@ -213,11 +213,11 @@
 ### Task 3.2: Authoritative Balance Mutations Controller
 **Description:** Implement `LedgerMutationController` handling `POST /api/v1/ledger/debit` and `POST /api/v1/ledger/credit` (with alias support for `/debits` and `/credits`).
 **Acceptance criteria:**
-- [ ] Endpoints validate `@Valid @RequestBody DebitCreditRequestDto`.
-- [ ] Extracts authenticated user and client IP for audit context.
-- [ ] Returns HTTP 200 OK with `DebitCreditResponseDto`.
+- [x] Endpoints validate `@Valid @RequestBody DebitCreditRequestDto`.
+- [x] Extracts authenticated user and client IP for audit context.
+- [x] Returns HTTP 201 Created with `DebitCreditResponseDto`.
 **Verification:**
-- [ ] Tests pass: `./mvnw test -Dtest=LedgerMutationControllerTest`
+- [x] Tests pass: `./mvnw test -Dtest=LedgerMutationControllerTest`
 **Dependencies:** Tasks 2.3, 3.1
 **Files likely touched:**
 - `backend/ledger-service/src/main/java/com/group2/fse/ledger_service/controller/LedgerMutationController.java`
@@ -229,11 +229,11 @@
 ### Task 3.3: Atomic Fund Transfer Controller
 **Description:** Implement `LedgerTransferController` handling `POST /api/v1/ledger/transfer` (with alias support for `/transfers`).
 **Acceptance criteria:**
-- [ ] Endpoint validates `@Valid @RequestBody TransferRequestDto`.
-- [ ] Enforces mandatory `Idempotency-Key` header via existing interceptor.
-- [ ] Returns HTTP 200 OK with `TransferResponseDto`.
+- [x] Endpoint validates `@Valid @RequestBody TransferRequestDto`.
+- [x] Enforces mandatory `Idempotency-Key` header via existing interceptor.
+- [x] Returns HTTP 201 Created with `TransferResponseDto`.
 **Verification:**
-- [ ] Tests pass: `./mvnw test -Dtest=LedgerTransferControllerTest`
+- [x] Tests pass: `./mvnw test -Dtest=LedgerTransferControllerTest`
 **Dependencies:** Tasks 2.3, 3.1
 **Files likely touched:**
 - `backend/ledger-service/src/main/java/com/group2/fse/ledger_service/controller/LedgerTransferController.java`
@@ -245,10 +245,10 @@
 ### Task 3.4: High-Speed Cached Balance Controller
 **Description:** Implement `BalanceController` handling `GET /api/v1/ledger/balance/{accountId}` (with alias support for `/accounts/{accountId}/balance`).
 **Acceptance criteria:**
-- [ ] Returns HTTP 200 OK with `BalanceResponseDto` (`accountId`, `currency`, `availableBalance`, `asOfTimestamp`, `isCached`).
-- [ ] Caches balance in Redis for fast query retrieval ($< 2\text{ms}$).
+- [x] Returns HTTP 200 OK with `BalanceResponseDto` (`accountId`, `currency`, `availableBalance`, `asOfTimestamp`, `isCached`).
+- [x] Caches balance in Redis for fast query retrieval ($< 2\text{ms}$).
 **Verification:**
-- [ ] Tests pass: `./mvnw test -Dtest=BalanceControllerTest`
+- [x] Tests pass: `./mvnw test -Dtest=BalanceControllerTest`
 **Dependencies:** Tasks 2.2, 3.1
 **Files likely touched:**
 - `backend/ledger-service/src/main/java/com/group2/fse/ledger_service/controller/BalanceController.java`
@@ -258,10 +258,10 @@
 ---
 
 ### Checkpoint: REST Layer Verified
-- [ ] All REST endpoints exposed and functioning.
-- [ ] Valid requests succeed with 200 OK.
-- [ ] Validation errors return RFC-7807 problem details.
-- [ ] MockMvc tests pass with `@WithMockUser`.
+- [x] All REST endpoints exposed and functioning.
+- [x] Valid requests succeed with 200 OK / 201 Created.
+- [x] Validation errors return RFC-7807 problem details.
+- [x] MockMvc tests pass with standalone / MockMvc setup.
 
 ---
 
