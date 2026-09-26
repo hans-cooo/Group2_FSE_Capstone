@@ -1,6 +1,7 @@
 package com.group2.fse.ledger_service.config;
 
 import com.zaxxer.hikari.HikariDataSource;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -13,6 +14,7 @@ public class AuditDbConfig {
 
     @Bean(name = "auditPostgresDataSource")
     public DataSource auditPostgresDataSource(
+            @Value("${POSTGRES_HOST:localhost}") String host,
             @Value("${POSTGRES_PORT:5434}") String port,
             @Value("${POSTGRES_DB:audit_store}") String db,
             @Value("${POSTGRES_USER:postgres}") String user,
@@ -20,7 +22,7 @@ public class AuditDbConfig {
 
         HikariDataSource dataSource = new HikariDataSource();
         dataSource.setDriverClassName("org.postgresql.Driver");
-        dataSource.setJdbcUrl("jdbc:postgresql://localhost:" + port + "/" + db);
+        dataSource.setJdbcUrl("jdbc:postgresql://" + host + ":" + port + "/" + db);
         dataSource.setUsername(user);
         dataSource.setPassword(password);
         dataSource.setMaximumPoolSize(10);
@@ -31,7 +33,7 @@ public class AuditDbConfig {
     }
 
     @Bean(name = "auditJdbcTemplate")
-    public JdbcTemplate auditJdbcTemplate(DataSource auditPostgresDataSource) {
+    public JdbcTemplate auditJdbcTemplate(@Qualifier("auditPostgresDataSource") DataSource auditPostgresDataSource) {
         return new JdbcTemplate(auditPostgresDataSource);
     }
 }
