@@ -16,7 +16,7 @@ public class OracleDbConfig {
     public DataSource oracleDataSource(
             @Value("${spring.datasource.url:#{null}}") String explicitUrl,
             @Value("${ORACLE_HOST:${spring.datasource.host:localhost}}") String host,
-            @Value("${ORACLE_PORT:${spring.datasource.port:1521}}") String port,
+            @Value("${ORACLE_PORT:${spring.datasource.port:1522}}") String port,
             @Value("${ORACLE_DATABASE:XEPDB1}") String db,
             @Value("${spring.datasource.username:${APP_USER:core_user}}") String user,
             @Value("${spring.datasource.password:${APP_USER_PASSWORD}}") String password) {
