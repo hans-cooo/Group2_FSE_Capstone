@@ -6,7 +6,7 @@ services:
     image: gvenzl/oracle-free:latest
     container_name: oracle-core-db
     ports:
-      - "${ORACLE_PORT:-1521}:1521"
+      - "${ORACLE_PORT:-1522}:1521"
       - "${ORACLE_OEM_PORT:-5500}:5500"
     environment:
       ORACLE_PASSWORD: ${ORACLE_PASSWORD:?ORACLE_PASSWORD is required}

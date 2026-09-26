@@ -325,19 +325,31 @@ jobs:
 
       - name: Verify Oracle port reachable from runner host
         run: |
+          set -euo pipefail
           set -a
           # shellcheck disable=SC1091
           source .env
           set +a
+
           PORT="${ORACLE_PORT:-1522}"
-          echo "Verifying Oracle on runner host port $PORT..."
-          timeout 60s bash -c "
-            until nc -z 127.0.0.1 \$PORT; do
-              echo \"Waiting for port \$PORT on runner...\"
-              sleep 2
-            done
-          "
-          echo "Oracle port $PORT is reachable from the GitHub runner."
+          echo "Verifying Oracle on runner host port ${PORT}..."
+
+          READY=false
+          for i in $(seq 1 30); do
+            if nc -z 127.0.0.1 "$PORT" 2>/dev/null; then
+              READY=true
+              break
+            fi
+            echo "Waiting for port ${PORT} on runner (attempt $i/30)..."
+            sleep 2
+          done
+
+          if [ "$READY" = "false" ]; then
+            echo "ERROR: Oracle port ${PORT} was not reachable on runner host after 60 seconds."
+            exit 1
+          fi
+
+          echo "Oracle port ${PORT} is reachable from the GitHub runner."
 
       - name: Compile and Run Full Backend Test Suite
         run: |
