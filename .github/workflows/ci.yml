@@ -254,10 +254,10 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
 
-      - name: Spin up Database & Cache Infrastructure via Docker Compose
+      - name: Spin up Database, Cache & Messaging Infrastructure via Docker Compose
         run: |
-          echo "Starting Oracle XE, PostgreSQL and Redis containers..."
-          docker compose up -d oracle-core-db postgres-audit-db redis-cache
+          echo "Starting Oracle XE, PostgreSQL, Redis, and Kafka containers..."
+          docker compose up -d oracle-core-db postgres-audit-db redis-cache kafka-broker kafka-init-topics
 
           echo "Waiting for Redis to become healthy..."
           timeout 45s bash -c '
@@ -274,6 +274,14 @@ jobs:
             done
           '
           echo "PostgreSQL is healthy."
+
+          echo "Waiting for Kafka broker to become healthy..."
+          timeout 60s bash -c '
+            until docker exec kafka-broker /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1; do
+              sleep 3
+            done
+          '
+          echo "Kafka broker is healthy."
 
       - name: Wait for Oracle XE and XEPDB1 service
         run: |

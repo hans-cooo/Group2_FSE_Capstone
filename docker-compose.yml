@@ -119,6 +119,7 @@ services:
       - |
         echo "Creating core banking topics..."
         /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka-broker:29092 --create --if-not-exists --topic ledger.mutation.completed.v1 --partitions 3 --replication-factor 1
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka-broker:29092 --create --if-not-exists --topic ledger.transfer.completed.v1 --partitions 3 --replication-factor 1
         echo "Available topics:"
         /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka-broker:29092 --list
     networks:
