@@ -20,10 +20,14 @@ import java.util.Map;
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class CustomAccessDeniedHandler implements AccessDeniedHandler {
 
     private final ObjectMapper objectMapper;
+
+    public CustomAccessDeniedHandler(
+            @org.springframework.beans.factory.annotation.Autowired(required = false) ObjectMapper objectMapper) {
+        this.objectMapper = objectMapper != null ? objectMapper : new ObjectMapper();
+    }
 
     @Override
     public void handle(

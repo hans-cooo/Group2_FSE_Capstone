@@ -20,10 +20,14 @@ import java.util.Map;
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class CustomAuthenticationEntryPoint implements AuthenticationEntryPoint {
 
     private final ObjectMapper objectMapper;
+
+    public CustomAuthenticationEntryPoint(
+            @org.springframework.beans.factory.annotation.Autowired(required = false) ObjectMapper objectMapper) {
+        this.objectMapper = objectMapper != null ? objectMapper : new ObjectMapper();
+    }
 
     @Override
     public void commence(

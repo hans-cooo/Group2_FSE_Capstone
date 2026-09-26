@@ -14,7 +14,7 @@ public class OracleDbConfig {
     @Primary
     @Bean(name = "dataSource")
     public DataSource oracleDataSource(
-            @Value("${ORACLE_PORT:1521}") String port,
+            @Value("${ORACLE_PORT:1522}") String port,
             @Value("${ORACLE_DATABASE:XEPDB1}") String db,
             @Value("${APP_USER:core_user}") String user,
             @Value("${APP_USER_PASSWORD:CorePassword123!}") String password) {
