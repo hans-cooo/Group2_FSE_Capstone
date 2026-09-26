@@ -17,4 +17,10 @@ public class LoginRequestDto {
 
     @NotBlank(message = "Password is required")
     private String password;
+
+    /**
+     * Optional preferred delivery channel: "SMS", "EMAIL", or "TOTP".
+     * If omitted, defaults to SMS for customers and EMAIL for bank staff.
+     */
+    private String preferredChannel;
 }

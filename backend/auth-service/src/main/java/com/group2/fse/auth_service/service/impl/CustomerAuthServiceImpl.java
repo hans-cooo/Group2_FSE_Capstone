@@ -95,16 +95,31 @@ public class CustomerAuthServiceImpl implements CustomerAuthService {
 
         if (mfaEnabled) {
             log.info("MFA challenge triggered for customer: {}", customer.getUsername());
-            MfaChallenge challenge = mfaChallengeService.createChallenge(
-                    customer.getCustomerId(), customer.getUsername(), roles, "CUSTOMER");
+            String channel = resolveChannel(request.getPreferredChannel(), "SMS");
+            String destination;
+            String maskedDestination;
 
-            String maskedPhone = maskDestination(customer.getCustomerId());
+            if ("EMAIL".equalsIgnoreCase(channel)) {
+                destination = customer.getEmail();
+                maskedDestination = maskEmail(customer.getEmail());
+            } else if ("TOTP".equalsIgnoreCase(channel)) {
+                destination = "Authenticator App (Google/Microsoft Authenticator)";
+                maskedDestination = "Authenticator App (RFC 6238)";
+            } else {
+                channel = "SMS";
+                String phone = getCustomerPhone(customer.getCustomerId());
+                destination = phone;
+                maskedDestination = maskPhone(phone);
+            }
+
+            MfaChallenge challenge = mfaChallengeService.createChallenge(
+                    customer.getCustomerId(), customer.getUsername(), roles, "CUSTOMER", channel, destination);
 
             return LoginResultDto.builder()
                     .mfaRequired(true)
                     .mfaToken(challenge.getMfaToken())
-                    .deliveryChannel("SMS")
-                    .maskedDestination(maskedPhone)
+                    .deliveryChannel(channel)
+                    .maskedDestination(maskedDestination)
                     .build();
         }
 
@@ -144,15 +159,38 @@ public class CustomerAuthServiceImpl implements CustomerAuthService {
                 .build();
     }
 
-    private String maskDestination(Long customerId) {
+    private String resolveChannel(String preferred, String defaultChannel) {
+        if (preferred == null || preferred.isBlank()) {
+            return defaultChannel;
+        }
+        String p = preferred.trim().toUpperCase();
+        if ("TOTP".equals(p) || "EMAIL".equals(p) || "SMS".equals(p)) {
+            return p;
+        }
+        return defaultChannel;
+    }
+
+    private String getCustomerPhone(Long customerId) {
         return kycRepository.findByCustomerCustomerId(customerId)
-                .map(kyc -> {
-                    String num = kyc.getMobileNumber();
-                    if (num != null && num.length() >= 7) {
-                        return num.substring(0, 4) + " **** " + num.substring(num.length() - 3);
-                    }
-                    return "+63 9** **** ***";
-                })
-                .orElse("+63 9** **** ***");
+                .map(Kyc::getMobileNumber)
+                .orElse("+639170000000");
+    }
+
+    private String maskPhone(String num) {
+        if (num != null && num.length() >= 7) {
+            return num.substring(0, 4) + " **** " + num.substring(num.length() - 3);
+        }
+        return "+63 9** **** ***";
+    }
+
+    private String maskEmail(String email) {
+        if (email == null || !email.contains("@")) {
+            return "***@bank.ph";
+        }
+        String[] parts = email.split("@");
+        String name = parts[0];
+        String domain = parts[1];
+        String visible = name.length() > 2 ? name.substring(0, 2) : name.substring(0, 1);
+        return visible + "****@" + domain;
     }
 }

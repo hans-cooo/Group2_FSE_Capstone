@@ -60,16 +60,30 @@ public class StaffAuthServiceImpl implements StaffAuthService {
 
         if (mfaEnabled) {
             log.info("MFA challenge triggered for staff: {}", staff.getUsername());
-            MfaChallenge challenge = mfaChallengeService.createChallenge(
-                    staff.getUserId(), staff.getUsername(), roles, "STAFF");
+            String channel = resolveChannel(request.getPreferredChannel(), "EMAIL");
+            String destination;
+            String maskedDestination;
 
-            String maskedEmail = maskEmail(staff.getEmail());
+            if ("TOTP".equalsIgnoreCase(channel)) {
+                destination = "Authenticator App (Google/Microsoft Authenticator)";
+                maskedDestination = "Authenticator App (RFC 6238)";
+            } else if ("SMS".equalsIgnoreCase(channel)) {
+                destination = "+63 917 000 0000"; // Or staff phone if stored
+                maskedDestination = "+63 917 **** 000";
+            } else {
+                channel = "EMAIL";
+                destination = staff.getEmail();
+                maskedDestination = maskEmail(staff.getEmail());
+            }
+
+            MfaChallenge challenge = mfaChallengeService.createChallenge(
+                    staff.getUserId(), staff.getUsername(), roles, "STAFF", channel, destination);
 
             return LoginResultDto.builder()
                     .mfaRequired(true)
                     .mfaToken(challenge.getMfaToken())
-                    .deliveryChannel("EMAIL/TOTP")
-                    .maskedDestination(maskedEmail)
+                    .deliveryChannel(channel)
+                    .maskedDestination(maskedDestination)
                     .build();
         }
 
@@ -128,5 +142,16 @@ public class StaffAuthServiceImpl implements StaffAuthService {
         String domain = parts[1];
         String visible = name.length() > 2 ? name.substring(0, 2) : name.substring(0, 1);
         return visible + "****@" + domain;
+    }
+
+    private String resolveChannel(String preferred, String defaultChannel) {
+        if (preferred == null || preferred.isBlank()) {
+            return defaultChannel;
+        }
+        String p = preferred.trim().toUpperCase();
+        if ("TOTP".equals(p) || "EMAIL".equals(p) || "SMS".equals(p)) {
+            return p;
+        }
+        return defaultChannel;
     }
 }

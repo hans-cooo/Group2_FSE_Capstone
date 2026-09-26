@@ -21,5 +21,8 @@ public class MfaChallenge implements Serializable {
     private List<String> roles;
     private String userType; // CUSTOMER or STAFF
     private String code;     // 6-digit OTP
+    private String channel;  // SMS, EMAIL, TOTP
+    private String destination; // Phone, Email, or Authenticator label
+    private String totpSecret;  // Base32 secret if TOTP
     private Instant createdAt;
 }
