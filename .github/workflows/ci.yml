@@ -272,33 +272,41 @@ jobs:
           '
           echo "PostgreSQL is healthy."
 
-      - name: Wait for Oracle XEPDB1 service registration
+      - name: Wait for Oracle XEPDB1 service
         run: |
-          set -e
-          echo "Waiting for Oracle XE listener to register XEPDB1 service..."
+          set -euo pipefail
 
-          timeout 180s bash -c '
-            until docker exec oracle-core-db bash -lc "
-              lsnrctl services 2>/dev/null | grep -q \"Service.*XEPDB1\"
-            "; do
-              echo "XEPDB1 is not registered with listener yet..."
-              sleep 5
-            done
-          '
+          echo "Waiting for Oracle XE XEPDB1 to accept connections..."
 
-          echo "Waiting for XEPDB1 to accept SQL queries..."
-          timeout 60s bash -c '
+          timeout 360s bash -c '
             until docker exec oracle-core-db bash -lc "
-              printf \"SELECT 1 FROM dual;\\nEXIT;\\n\" |
-              sqlplus -s core_user/CorePassword123!@//localhost:1521/XEPDB1 |
+              printf \"WHENEVER SQLERROR EXIT SQL.SQLCODE\\nSELECT 1 FROM dual;\\nEXIT;\\n\" |
+              sqlplus -L -s core_user/CorePassword123!@//localhost:1521/XEPDB1 |
               grep -Eq \"^[[:space:]]*1[[:space:]]*$\"
             "; do
-              echo "XEPDB1 is registered but not accepting queries yet..."
+              echo "XEPDB1 is not ready yet..."
               sleep 5
             done
           '
 
           echo "Oracle XE XEPDB1 is ready."
+
+      - name: Dump Oracle diagnostics on failure
+        if: failure()
+        run: |
+          echo "===== Oracle container status ====="
+          docker ps -a --filter name=oracle-core-db
+
+          echo "===== Oracle container logs ====="
+          docker logs oracle-core-db
+
+          echo "===== Listener services ====="
+          docker exec oracle-core-db bash -lc \
+            'lsnrctl services || true'
+
+          echo "===== Oracle processes ====="
+          docker exec oracle-core-db bash -lc \
+            'ps -ef | grep -E "ora_pmon|tnslsnr" | grep -v grep || true'
 
       - name: Verify Oracle port reachable from runner host
         run: |
