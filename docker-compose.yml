@@ -9,15 +9,15 @@ services:
       - "${ORACLE_PORT:-1521}:1521"
       - "${ORACLE_OEM_PORT:-5500}:5500"
     environment:
-      ORACLE_PASSWORD: ${ORACLE_PASSWORD:-SysPassword123!}
+      ORACLE_PASSWORD: ${ORACLE_PASSWORD:?ORACLE_PASSWORD is required}
       APP_USER: ${APP_USER:-core_user}
-      APP_USER_PASSWORD: ${APP_USER_PASSWORD:-CorePassword123!}
+      APP_USER_PASSWORD: ${APP_USER_PASSWORD:?APP_USER_PASSWORD is required}
       ORACLE_DATABASE: ${ORACLE_DATABASE:-XEPDB1}
     volumes:
       - ./database/oracle:/container-entrypoint-initdb.d:ro
       - oracle_data:/opt/oracle/oradata
     healthcheck:
-      test: ["CMD-SHELL", "printf 'WHENEVER SQLERROR EXIT SQL.SQLCODE\\nSELECT 1 FROM dual;\\nEXIT;\\n' | sqlplus -L -s ${APP_USER:-core_user}/${APP_USER_PASSWORD:-CorePassword123!}@//localhost:1521/${ORACLE_DATABASE:-XEPDB1} | grep -Eq '^[[:space:]]*1[[:space:]]*$' || exit 1"]
+      test: ["CMD-SHELL", "printf 'WHENEVER SQLERROR EXIT SQL.SQLCODE\\nSELECT 1 FROM dual;\\nEXIT;\\n' | sqlplus -L -s ${APP_USER:-core_user}/${APP_USER_PASSWORD}@//localhost:1521/${ORACLE_DATABASE:-XEPDB1} | grep -Eq '^[[:space:]]*1[[:space:]]*$' || exit 1"]
       interval: 10s
       timeout: 10s
       retries: 36
@@ -36,7 +36,7 @@ services:
       - "${POSTGRES_PORT:-5434}:5432"
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-AuditPassword123!}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       POSTGRES_DB: ${POSTGRES_DB:-audit_store}
     volumes:
       - ./database/postgres:/docker-entrypoint-initdb.d:ro
@@ -168,16 +168,16 @@ services:
       ORACLE_PORT: 1521
       ORACLE_DATABASE: ${ORACLE_DATABASE:-XEPDB1}
       APP_USER: ${APP_USER:-core_user}
-      APP_USER_PASSWORD: ${APP_USER_PASSWORD:-CorePassword123!}
+      APP_USER_PASSWORD: ${APP_USER_PASSWORD:?APP_USER_PASSWORD is required}
       POSTGRES_HOST: postgres-audit-db
       POSTGRES_PORT: 5432
       POSTGRES_DB: ${POSTGRES_DB:-audit_store}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-AuditPassword123!}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       REDIS_HOST: redis-cache
       REDIS_PORT: 6379
       KAFKA_BOOTSTRAP_SERVERS: kafka-broker:29092
-      JWT_SECRET: ${JWT_SECRET:-404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-86400000}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
     healthcheck:

@@ -14,15 +14,19 @@ public class AuditDbConfig {
 
     @Bean(name = "auditPostgresDataSource")
     public DataSource auditPostgresDataSource(
-            @Value("${POSTGRES_HOST:localhost}") String host,
-            @Value("${POSTGRES_PORT:5434}") String port,
+            @Value("${postgres.datasource.url:#{null}}") String explicitUrl,
+            @Value("${POSTGRES_HOST:${postgres.datasource.host:localhost}}") String host,
+            @Value("${POSTGRES_PORT:${postgres.datasource.port:5434}}") String port,
             @Value("${POSTGRES_DB:audit_store}") String db,
-            @Value("${POSTGRES_USER:postgres}") String user,
-            @Value("${POSTGRES_PASSWORD:AuditPassword123!}") String password) {
+            @Value("${postgres.datasource.username:${POSTGRES_USER:postgres}}") String user,
+            @Value("${postgres.datasource.password:${POSTGRES_PASSWORD}}") String password) {
 
         HikariDataSource dataSource = new HikariDataSource();
         dataSource.setDriverClassName("org.postgresql.Driver");
-        dataSource.setJdbcUrl("jdbc:postgresql://" + host + ":" + port + "/" + db);
+        String jdbcUrl = (explicitUrl != null && !explicitUrl.isBlank())
+                ? explicitUrl
+                : "jdbc:postgresql://" + host + ":" + port + "/" + db;
+        dataSource.setJdbcUrl(jdbcUrl);
         dataSource.setUsername(user);
         dataSource.setPassword(password);
         dataSource.setMaximumPoolSize(10);

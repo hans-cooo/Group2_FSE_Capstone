@@ -243,6 +243,8 @@ jobs:
       - name: Prepare environment configuration
         run: |
           cp .env.example .env
+          echo "Environment configuration prepared from .env.example:"
+          grep -E "ORACLE_PORT|POSTGRES_PORT|REDIS_PORT|KAFKA_PORT" .env
 
       - name: Set up Java 21 JDK (Temurin)
         uses: actions/setup-java@v4

@@ -47,6 +47,18 @@ if (-not (Test-Path $envFile)) {
     Write-Host "  Existing .env found." -ForegroundColor Green
 }
 
+# Load .env into process environment
+Get-Content $envFile | ForEach-Object {
+    $trimmed = $_.Trim()
+    if ($trimmed -and -not $trimmed.StartsWith("#") -and $trimmed.Contains("=")) {
+        $kv = $trimmed.Split("=", 2)
+        [System.Environment]::SetEnvironmentVariable($kv[0].Trim(), $kv[1].Trim(), "Process")
+    }
+}
+$appUser = if ($env:APP_USER) { $env:APP_USER } else { "core_user" }
+$appUserPassword = if ($env:APP_USER_PASSWORD) { $env:APP_USER_PASSWORD } else { "" }
+$oracleDb = if ($env:ORACLE_DATABASE) { $env:ORACLE_DATABASE } else { "XEPDB1" }
+
 # 3. Spin up docker-compose services
 Write-Host "[3/5] Starting Data Foundation containers..." -ForegroundColor Yellow
 Push-Location $rootPath
@@ -86,9 +98,9 @@ while ($attempt -le $maxAttempts) {
 
     Write-Host "  [Attempt $attempt/$maxAttempts] Status -> Oracle: $oracleHealthy | Postgres: $postgresHealthy | Redis: $redisHealthy | Kafka: $kafkaHealthy" -ForegroundColor Gray
 
-    # Test actual connectivity to Oracle & Postgres
-    $oraTest = docker exec oracle-core-db bash -c "printf 'SELECT 1 FROM DUAL;\n' | sqlplus -s core_user/CorePassword123!@localhost:1521/XEPDB1" 2>&1
-    $pgTest = docker exec postgres-audit-db pg_isready -U postgres -d audit_store 2>&1
+    # Test actual connectivity to Oracle & Postgres using loaded env vars
+    $oraTest = docker exec oracle-core-db bash -c "printf 'SELECT 1 FROM DUAL;\n' | sqlplus -s $appUser/$appUserPassword@localhost:1521/$oracleDb" 2>&1
+    $pgTest = docker exec postgres-audit-db bash -c 'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}' 2>&1
 
     if ($LASTEXITCODE -eq 0 -and $oraTest -match "1" -and $pgTest -match "accepting connections") {
         $allHealthy = $true

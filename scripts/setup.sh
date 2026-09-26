@@ -46,8 +46,8 @@ ALL_HEALTHY=false
 while [ "${ATTEMPT}" -le "${MAX_ATTEMPTS}" ]; do
     sleep 3
     
-    ORA_STATUS=$(docker exec oracle-core-db bash -c "echo 'SELECT 1 FROM DUAL;' | sqlplus -s core_user/CorePassword123!@localhost:1521/XEPDB1" 2>&1 || true)
-    PG_STATUS=$(docker exec postgres-audit-db pg_isready -U postgres -d audit_store 2>&1 || true)
+    ORA_STATUS=$(docker exec oracle-core-db bash -c 'echo "SELECT 1 FROM DUAL;" | sqlplus -s ${APP_USER}/${APP_USER_PASSWORD}@localhost:1521/${ORACLE_DATABASE}' 2>&1 || true)
+    PG_STATUS=$(docker exec postgres-audit-db bash -c 'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}' 2>&1 || true)
 
     if echo "${ORA_STATUS}" | grep -q "1" && echo "${PG_STATUS}" | grep -q "accepting connections"; then
         ALL_HEALTHY=true
