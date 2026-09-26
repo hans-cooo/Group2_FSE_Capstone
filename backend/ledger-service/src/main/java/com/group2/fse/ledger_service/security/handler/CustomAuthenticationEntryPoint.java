@@ -83,6 +83,9 @@ public class CustomAuthenticationEntryPoint implements AuthenticationEntryPoint 
         problem.put("instance", request.getRequestURI());
         problem.put("errorCode", errorCode);
         problem.put("timestamp", Instant.now().toString());
+        problem.put("error", "UNAUTHORIZED");
+        problem.put("message", detail);
+        problem.put("path", request.getRequestURI());
 
         response.getWriter().write(objectMapper.writeValueAsString(problem));
     }

@@ -135,6 +135,52 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void shouldHandleAccountNotActiveException() {
+        AccountNotActiveException ex = new AccountNotActiveException(50L, "FROZEN");
+
+        ResponseEntity<Map<String, Object>> response = exceptionHandler.handleAccountNotActive(ex, request);
+
+        assertEquals(HttpStatus.UNPROCESSABLE_ENTITY, response.getStatusCode());
+        Map<String, Object> body = response.getBody();
+        assertNotNull(body);
+        assertEquals("ACCOUNT_NOT_ACTIVE", body.get("errorCode"));
+        assertEquals(422, body.get("status"));
+        assertEquals(50L, body.get("accountId"));
+        assertEquals("FROZEN", body.get("accountStatus"));
+    }
+
+    @Test
+    void shouldHandleAccountNonZeroBalanceException() {
+        AccountNonZeroBalanceException ex = new AccountNonZeroBalanceException(
+                "ACC_10000004", new BigDecimal("12500.0000"));
+
+        ResponseEntity<Map<String, Object>> response = exceptionHandler.handleAccountNonZeroBalance(ex, request);
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        Map<String, Object> body = response.getBody();
+        assertNotNull(body);
+        assertEquals("ACCOUNT_NON_ZERO_BALANCE", body.get("errorCode"));
+        assertEquals(400, body.get("status"));
+        assertEquals("ACC_10000004", body.get("accountNumber"));
+        assertEquals(new BigDecimal("12500.0000"), body.get("availableBalance"));
+    }
+
+    @Test
+    void shouldHandleAccountActiveFlagExistsException() {
+        AccountActiveFlagExistsException ex = new AccountActiveFlagExistsException(88L, "AML_RISK_HOLD");
+
+        ResponseEntity<Map<String, Object>> response = exceptionHandler.handleAccountActiveFlagExists(ex, request);
+
+        assertEquals(HttpStatus.UNPROCESSABLE_ENTITY, response.getStatusCode());
+        Map<String, Object> body = response.getBody();
+        assertNotNull(body);
+        assertEquals("ACCOUNT_ACTIVE_FLAG_EXISTS", body.get("errorCode"));
+        assertEquals(422, body.get("status"));
+        assertEquals(88L, body.get("accountId"));
+        assertEquals("AML_RISK_HOLD", body.get("flagType"));
+    }
+
+    @Test
     void shouldHandleDualWriteAuditException() {
         DualWriteAuditException ex = new DualWriteAuditException("PostgreSQL connection refused");
 
@@ -143,7 +189,8 @@ class GlobalExceptionHandlerTest {
         assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
         Map<String, Object> body = response.getBody();
         assertNotNull(body);
-        assertEquals("AUDIT_LOGGING_FAILURE", body.get("errorCode"));
+        assertEquals("LEDGER_AUDIT_DUAL_WRITE_FAILED", body.get("errorCode"));
+        assertEquals("AUDIT_LOGGING_FAILURE", body.get("legacyErrorCode"));
         assertEquals(500, body.get("status"));
     }
 

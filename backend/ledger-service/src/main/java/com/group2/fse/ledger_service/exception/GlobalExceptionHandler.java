@@ -206,19 +206,98 @@ public class GlobalExceptionHandler {
                 .body(problem);
     }
 
+    @ExceptionHandler(AccountNotActiveException.class)
+    public ResponseEntity<Map<String, Object>> handleAccountNotActive(
+            AccountNotActiveException ex, HttpServletRequest request) {
+        log.warn("Account not active exception on {}: {}", request.getRequestURI(), ex.getMessage());
+
+        Map<String, Object> problem = createProblemDetails(
+                "https://api.corebank.local/errors/ACCOUNT_NOT_ACTIVE",
+                "Account Not Active",
+                HttpStatus.UNPROCESSABLE_ENTITY.value(),
+                ex.getMessage(),
+                request.getRequestURI(),
+                "ACCOUNT_NOT_ACTIVE"
+        );
+        if (ex.getAccountId() != null) {
+            problem.put("accountId", ex.getAccountId());
+        }
+        if (ex.getAccountStatus() != null) {
+            problem.put("accountStatus", ex.getAccountStatus());
+        }
+
+        return ResponseEntity
+                .status(HttpStatus.UNPROCESSABLE_ENTITY)
+                .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+                .body(problem);
+    }
+
+    @ExceptionHandler(AccountNonZeroBalanceException.class)
+    public ResponseEntity<Map<String, Object>> handleAccountNonZeroBalance(
+            AccountNonZeroBalanceException ex, HttpServletRequest request) {
+        log.warn("Account non-zero balance on closure on {}: {}", request.getRequestURI(), ex.getMessage());
+
+        Map<String, Object> problem = createProblemDetails(
+                "https://api.corebank.local/errors/ACCOUNT_NON_ZERO_BALANCE",
+                "Account Balance Non-Zero",
+                HttpStatus.BAD_REQUEST.value(),
+                ex.getMessage(),
+                request.getRequestURI(),
+                "ACCOUNT_NON_ZERO_BALANCE"
+        );
+        if (ex.getAccountNumber() != null) {
+            problem.put("accountNumber", ex.getAccountNumber());
+        }
+        if (ex.getAvailableBalance() != null) {
+            problem.put("availableBalance", ex.getAvailableBalance());
+        }
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+                .body(problem);
+    }
+
+    @ExceptionHandler(AccountActiveFlagExistsException.class)
+    public ResponseEntity<Map<String, Object>> handleAccountActiveFlagExists(
+            AccountActiveFlagExistsException ex, HttpServletRequest request) {
+        log.warn("Account active flag block on {}: {}", request.getRequestURI(), ex.getMessage());
+
+        Map<String, Object> problem = createProblemDetails(
+                "https://api.corebank.local/errors/ACCOUNT_ACTIVE_FLAG_EXISTS",
+                "Account Flag Restricted",
+                HttpStatus.UNPROCESSABLE_ENTITY.value(),
+                ex.getMessage(),
+                request.getRequestURI(),
+                "ACCOUNT_ACTIVE_FLAG_EXISTS"
+        );
+        if (ex.getAccountId() != null) {
+            problem.put("accountId", ex.getAccountId());
+        }
+        if (ex.getFlagType() != null) {
+            problem.put("flagType", ex.getFlagType());
+        }
+
+        return ResponseEntity
+                .status(HttpStatus.UNPROCESSABLE_ENTITY)
+                .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+                .body(problem);
+    }
+
     @ExceptionHandler(DualWriteAuditException.class)
     public ResponseEntity<Map<String, Object>> handleDualWriteAuditException(
             DualWriteAuditException ex, HttpServletRequest request) {
         log.error("Dual-write audit failure on {}: {}", request.getRequestURI(), ex.getMessage(), ex);
 
         Map<String, Object> problem = createProblemDetails(
-                "https://api.corebank.local/errors/AUDIT_WRITE_FAILED",
-                "Audit Logging Failure",
+                "https://api.corebank.local/errors/LEDGER_AUDIT_DUAL_WRITE_FAILED",
+                "Dual-Write Audit Logging Failure",
                 HttpStatus.INTERNAL_SERVER_ERROR.value(),
                 "Forensic audit logging failed; transaction was rolled back for safety.",
                 request.getRequestURI(),
-                "AUDIT_LOGGING_FAILURE"
+                "LEDGER_AUDIT_DUAL_WRITE_FAILED"
         );
+        problem.put("legacyErrorCode", "AUDIT_LOGGING_FAILURE");
 
         return ResponseEntity
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)

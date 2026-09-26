@@ -82,8 +82,8 @@ class SecurityFilterIntegrationTest {
 
         when(jwtTokenProvider.validateToken(rawToken)).thenReturn(true);
         UserPrincipal principal = UserPrincipal.create(1001L, "teller_jane", List.of("ROLE_TELLER"));
-        UsernamePasswordAuthenticationToken auth =
-                new UsernamePasswordAuthenticationToken(principal, rawToken, principal.getAuthorities());
+        UsernamePasswordAuthenticationToken auth
+                = new UsernamePasswordAuthenticationToken(principal, rawToken, principal.getAuthorities());
         when(jwtTokenProvider.getAuthentication(rawToken)).thenReturn(auth);
         when(tokenBlacklistService.isRevoked("jti-active-100")).thenReturn(false);
 
@@ -115,8 +115,8 @@ class SecurityFilterIntegrationTest {
 
         when(jwtTokenProvider.validateToken(rawToken)).thenReturn(true);
         UserPrincipal principal = UserPrincipal.create(1001L, "teller_jane", List.of("ROLE_TELLER"));
-        UsernamePasswordAuthenticationToken auth =
-                new UsernamePasswordAuthenticationToken(principal, rawToken, principal.getAuthorities());
+        UsernamePasswordAuthenticationToken auth
+                = new UsernamePasswordAuthenticationToken(principal, rawToken, principal.getAuthorities());
         when(jwtTokenProvider.getAuthentication(rawToken)).thenReturn(auth);
         when(tokenBlacklistService.isRevoked("jti-revoked-200")).thenReturn(true);
 
@@ -181,4 +181,3 @@ class SecurityFilterIntegrationTest {
                 .contains("\"instance\":\"/api/v1/ledger/debit\"");
     }
 }
-
