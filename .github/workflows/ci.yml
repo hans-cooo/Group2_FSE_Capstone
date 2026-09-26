@@ -1,10 +1,10 @@
-name: Core Banking CI - Local Data Foundation
+name: Core Banking CI - Build, Test & Integrity Pipeline
 
 on:
   push:
-    branches: [ main, master, "feature/**", "phase/**" ]
+    branches: [ main, master, dev, develop, "feat/**", "feature/**", "fix/**", "phase/**" ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ main, master, dev ]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -12,10 +12,10 @@ concurrency:
 
 jobs:
   # ============================================================================
-  # JOB 1: Configuration & Compose Syntax Validation
+  # JOB 1: Configuration, Scripts & Compose Syntax Validation
   # ============================================================================
   validate-config:
-    name: 1. Validate Docker Compose & Environment
+    name: 1. Validate Docker Compose, Scripts & Environment
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository code
@@ -31,6 +31,24 @@ jobs:
         run: |
           docker compose config --quiet
           echo "docker-compose.yml syntax is valid."
+
+      - name: Validate shell scripts syntax
+        run: |
+          echo "Checking syntax of all shell scripts..."
+          for script in scripts/*.sh; do
+            if [ -f "$script" ]; then
+              bash -n "$script"
+              echo "  [VALID] $script"
+            fi
+          done
+
+      - name: Verify core project directories & artifacts
+        run: |
+          test -f backend/ledger-service/pom.xml || (echo "backend/ledger-service/pom.xml missing!" && exit 1)
+          test -f backend/ledger-service/mvnw || (echo "Maven wrapper missing!" && exit 1)
+          test -f database/oracle/01_init_user.sql || (echo "Oracle init SQL missing!" && exit 1)
+          test -f database/postgres/01_init_db.sql || (echo "Postgres init SQL missing!" && exit 1)
+          echo "Core file layout verified."
 
   # ============================================================================
   # JOB 2: PostgreSQL Immutable Audit Store & Cryptographic Triggers
@@ -72,7 +90,6 @@ jobs:
 
       - name: Verify Single Source of Truth (SSOT) Isolation
         run: |
-          # Assert that core_banking schema does NOT exist in PostgreSQL (business tables strictly in Oracle)
           SSOT_COUNT=$(docker exec pg-ci psql -U postgres -d audit_store -t -A -c "SELECT count(*) FROM information_schema.schemata WHERE schema_name = 'core_banking';")
           if [ "$SSOT_COUNT" -eq "0" ]; then
             echo "PASS: Single Source of Truth verified. No business tables in PostgreSQL."
@@ -83,7 +100,6 @@ jobs:
 
       - name: Verify Cryptographic SHA-256 Hash Chaining
         run: |
-          # Verify 3 seed entries exist with 64-character SHA-256 hashes
           COUNT=$(docker exec pg-ci psql -U postgres -d audit_store -t -A -c "SELECT count(*) FROM audit_store.ledger_mutation_audit;")
           if [ "$COUNT" -ge 3 ]; then
             echo "PASS: $COUNT seed audit entries confirmed."
@@ -213,3 +229,149 @@ jobs:
           done
 
           echo "PASS: All 13 ERD tables properly defined for Oracle Master."
+
+  # ============================================================================
+  # JOB 5: Java 21 Spring Boot Backend Build & Test Suite
+  # ============================================================================
+  build-and-test-backend:
+    name: 5. Build & Test Ledger Engine (Java 21 / Spring Boot)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v4
+
+      - name: Prepare environment configuration
+        run: |
+          cp .env.example .env
+
+      - name: Set up Java 21 JDK (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Spin up Database & Cache Infrastructure via Docker Compose
+        run: |
+          echo "Starting Oracle XE, PostgreSQL and Redis containers..."
+          docker compose up -d oracle-core-db postgres-audit-db redis-cache
+
+          echo "Waiting for Redis to become healthy..."
+          timeout 45s bash -c '
+            until docker exec redis-cache redis-cli ping | grep -q "PONG"; do
+              sleep 2
+            done
+          '
+          echo "Redis is healthy."
+
+          echo "Waiting for PostgreSQL to become healthy..."
+          timeout 45s bash -c '
+            until docker exec postgres-audit-db pg_isready -U postgres -d audit_store; do
+              sleep 2
+            done
+          '
+          echo "PostgreSQL is healthy."
+
+      - name: Wait for Oracle XEPDB1 service
+        run: |
+          set -euo pipefail
+
+          echo "Waiting for Oracle XE XEPDB1 to accept connections..."
+
+          timeout 360s bash -c '
+            until docker exec oracle-core-db bash -lc "
+              printf \"WHENEVER SQLERROR EXIT SQL.SQLCODE\\nSELECT 1 FROM dual;\\nEXIT;\\n\" |
+              sqlplus -L -s core_user/CorePassword123!@//localhost:1521/XEPDB1 |
+              grep -Eq \"^[[:space:]]*1[[:space:]]*$\"
+            "; do
+              echo "XEPDB1 is not ready yet..."
+              sleep 5
+            done
+          '
+
+          echo "Oracle XE XEPDB1 is ready."
+
+      - name: Dump Oracle diagnostics on failure
+        if: failure()
+        run: |
+          echo "===== Oracle container status ====="
+          docker ps -a --filter name=oracle-core-db
+
+          echo "===== Oracle container logs ====="
+          docker logs oracle-core-db
+
+          echo "===== Listener services ====="
+          docker exec oracle-core-db bash -lc \
+            'lsnrctl services || true'
+
+          echo "===== Oracle processes ====="
+          docker exec oracle-core-db bash -lc \
+            'ps -ef | grep -E "ora_pmon|tnslsnr" | grep -v grep || true'
+
+      - name: Verify Oracle port reachable from runner host
+        run: |
+          timeout 60s bash -c '
+            until nc -z 127.0.0.1 1521; do
+              echo "Waiting for port 1521 on runner..."
+              sleep 2
+            done
+          '
+          echo "Oracle port 1521 is reachable from the GitHub runner."
+
+      - name: Compile and Run Full Backend Test Suite
+        run: |
+          cd backend/ledger-service
+          chmod +x mvnw
+          ./mvnw clean test -B --no-transfer-progress
+
+      - name: Publish Surefire Test Reports on Failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-surefire-test-reports
+          path: backend/ledger-service/target/surefire-reports/
+          retention-days: 7
+
+  # ============================================================================
+  # JOB 6: CI Quality Gate (Branch Protection Required Check)
+  # ============================================================================
+  ci-quality-gate:
+    name: 6. Core Banking CI Quality Gate
+    runs-on: ubuntu-latest
+    needs:
+      - validate-config
+      - test-postgres-audit-store
+      - test-redis-and-kafka
+      - validate-oracle-ddl
+      - build-and-test-backend
+    if: always()
+    steps:
+      - name: Evaluate All Pipeline Checks
+        run: |
+          echo "=========================================================="
+          echo " Evaluating Core Banking Pipeline Quality Gate...         "
+          echo "=========================================================="
+          
+          CONFIG_STATUS="${{ needs.validate-config.result }}"
+          PG_STATUS="${{ needs.test-postgres-audit-store.result }}"
+          REDIS_KAFKA_STATUS="${{ needs.test-redis-and-kafka.result }}"
+          ORACLE_STATUS="${{ needs.validate-oracle-ddl.result }}"
+          BACKEND_STATUS="${{ needs.build-and-test-backend.result }}"
+
+          echo "1. Validate Config & Scripts:  $CONFIG_STATUS"
+          echo "2. PostgreSQL Audit Store:    $PG_STATUS"
+          echo "3. Redis & Kafka Backbone:    $REDIS_KAFKA_STATUS"
+          echo "4. Oracle DDL Validation:     $ORACLE_STATUS"
+          echo "5. Backend Java 21 Tests:     $BACKEND_STATUS"
+          echo "=========================================================="
+
+          if [ "$CONFIG_STATUS" != "success" ] || \
+             [ "$PG_STATUS" != "success" ] || \
+             [ "$REDIS_KAFKA_STATUS" != "success" ] || \
+             [ "$ORACLE_STATUS" != "success" ] || \
+             [ "$BACKEND_STATUS" != "success" ]; then
+            echo "❌ QUALITY GATE FAILED: One or more pipeline stages did not pass."
+            exit 1
+          fi
+
+          echo "✅ QUALITY GATE PASSED: All 5 validation suites succeeded. Safe to merge!"
