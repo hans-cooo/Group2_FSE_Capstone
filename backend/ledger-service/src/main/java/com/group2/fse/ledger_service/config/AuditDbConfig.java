@@ -1,6 +1,7 @@
 package com.group2.fse.ledger_service.config;
 
 import com.zaxxer.hikari.HikariDataSource;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -13,14 +14,19 @@ public class AuditDbConfig {
 
     @Bean(name = "auditPostgresDataSource")
     public DataSource auditPostgresDataSource(
-            @Value("${POSTGRES_PORT:5434}") String port,
+            @Value("${postgres.datasource.url:#{null}}") String explicitUrl,
+            @Value("${POSTGRES_HOST:${postgres.datasource.host:localhost}}") String host,
+            @Value("${POSTGRES_PORT:${postgres.datasource.port:5434}}") String port,
             @Value("${POSTGRES_DB:audit_store}") String db,
-            @Value("${POSTGRES_USER:postgres}") String user,
-            @Value("${POSTGRES_PASSWORD:AuditPassword123!}") String password) {
+            @Value("${postgres.datasource.username:${POSTGRES_USER:postgres}}") String user,
+            @Value("${postgres.datasource.password:${POSTGRES_PASSWORD}}") String password) {
 
         HikariDataSource dataSource = new HikariDataSource();
         dataSource.setDriverClassName("org.postgresql.Driver");
-        dataSource.setJdbcUrl("jdbc:postgresql://localhost:" + port + "/" + db);
+        String jdbcUrl = (explicitUrl != null && !explicitUrl.isBlank())
+                ? explicitUrl
+                : "jdbc:postgresql://" + host + ":" + port + "/" + db;
+        dataSource.setJdbcUrl(jdbcUrl);
         dataSource.setUsername(user);
         dataSource.setPassword(password);
         dataSource.setMaximumPoolSize(10);
@@ -31,7 +37,7 @@ public class AuditDbConfig {
     }
 
     @Bean(name = "auditJdbcTemplate")
-    public JdbcTemplate auditJdbcTemplate(DataSource auditPostgresDataSource) {
+    public JdbcTemplate auditJdbcTemplate(@Qualifier("auditPostgresDataSource") DataSource auditPostgresDataSource) {
         return new JdbcTemplate(auditPostgresDataSource);
     }
 }

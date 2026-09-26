@@ -12,7 +12,6 @@ import java.util.List;
 
 /**
  * Cross-Origin Resource Sharing (CORS) Configuration.
- * Assigned to: Carl (FSE-401)
  */
 @Configuration
 public class CorsConfig {
@@ -28,7 +27,6 @@ public class CorsConfig {
                 .map(String::trim)
                 .toList();
 
-        // If origins is wildcard "*", use allowedOriginPatterns to allow credentials if needed
         if (origins.contains("*")) {
             configuration.addAllowedOriginPattern("*");
         } else {
@@ -42,11 +40,14 @@ public class CorsConfig {
                 "Content-Type",
                 "Accept",
                 "Origin",
-                "X-Requested-With"
+                "X-Requested-With",
+                "X-Correlation-ID"
         ));
         configuration.setExposedHeaders(List.of(
                 "Authorization",
-                "Idempotency-Key"
+                "Idempotency-Key",
+                "X-Cache-Replay",
+                "X-Correlation-ID"
         ));
         configuration.setAllowCredentials(true);
         configuration.setMaxAge(3600L);

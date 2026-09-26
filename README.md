@@ -35,10 +35,10 @@ The script will automatically:
 
 ## 2. Infrastructure Inventory & Connection Matrix
 
-| Service | Technology | Host Port | Database / PDB | Default User | Default Password | Purpose |
+| Service | Technology | Host Port | Database / PDB | User Config | Password Config | Purpose |
 |---|---|:---:|---|---|---|---|
-| **`oracle-core-db`** | Oracle Database Free / 21c XE | `1522` | `XEPDB1` | `core_user` | `CorePassword123!` | System of Record, Master Balances, Pessimistic Row Locking (`SELECT FOR UPDATE`) |
-| **`postgres-audit-db`** | PostgreSQL 16 | `5434` | `audit_store` | `postgres` | `AuditPassword123!` | Immutable Forensic Audit Store, SHA-256 Hash Chained Journal, Read Query Path |
+| **`oracle-core-db`** | Oracle Database Free / 21c XE | `1522` | `XEPDB1` | `${APP_USER}` (`core_user`) | `${APP_USER_PASSWORD}` (via `.env`) | System of Record, Master Balances, Pessimistic Row Locking (`SELECT FOR UPDATE`) |
+| **`postgres-audit-db`** | PostgreSQL 16 | `5434` | `audit_store` | `${POSTGRES_USER}` (`postgres`) | `${POSTGRES_PASSWORD}` (via `.env`) | Immutable Forensic Audit Store, SHA-256 Hash Chained Journal, Read Query Path |
 | **`redis-cache`** | Redis 7.4 Alpine | `6379` | `db 0` | *(none)* | *(none)* | Sub-2ms Distributed Idempotency Pre-flight Lock (`SETNX`) & Balance Read Cache |
 | **`kafka-broker`** | Apache Kafka 3.8.0 (KRaft) | `9092` | *(broker)* | *(plaintext)* | *(none)* | Asynchronous Event Streaming Backbone (`ledger.mutation.completed.v1`) |
 | **`kafka-ui`** | Provectus Kafka UI | `8085` | `local-cluster` | *(web)* | *(none)* | Visual browser dashboard for topics, messages, consumer groups |
@@ -128,7 +128,7 @@ To completely wipe databases, Kafka logs, and Redis cache and re-initialize from
 
 #### Oracle SQLPlus CLI
 ```bash
-docker exec -it oracle-core-db sqlplus core_user/CorePassword123!@localhost:1521/XEPDB1
+docker exec -it oracle-core-db bash -c 'sqlplus "${APP_USER}/${APP_USER_PASSWORD}@localhost:1521/${ORACLE_DATABASE}"'
 ```
 
 #### PostgreSQL PSQL CLI
@@ -161,9 +161,9 @@ spring:
   # Oracle Master System of Record (Primary Datasource)
   datasource:
     oracle:
-      url: jdbc:oracle:thin:@localhost:1521/XEPDB1
-      username: core_user
-      password: CorePassword123!
+      url: jdbc:oracle:thin:@${ORACLE_HOST:localhost}:${ORACLE_PORT:1522}/${ORACLE_DATABASE:XEPDB1}
+      username: ${APP_USER:core_user}
+      password: ${APP_USER_PASSWORD}
       driver-class-name: oracle.jdbc.OracleDriver
       hikari:
         maximum-pool-size: 30
@@ -171,9 +171,9 @@ spring:
 
     # PostgreSQL Immutable Audit Store (Secondary Datasource)
     postgres:
-      url: jdbc:postgresql://localhost:5432/audit_store
-      username: postgres
-      password: AuditPassword123!
+      url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5434}/${POSTGRES_DB:audit_store}
+      username: ${POSTGRES_USER:postgres}
+      password: ${POSTGRES_PASSWORD}
       driver-class-name: org.postgresql.Driver
       hikari:
         maximum-pool-size: 20

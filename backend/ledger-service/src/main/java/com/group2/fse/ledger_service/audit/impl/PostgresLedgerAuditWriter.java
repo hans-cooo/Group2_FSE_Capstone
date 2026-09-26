@@ -10,11 +10,14 @@ import org.springframework.stereotype.Component;
 import com.group2.fse.ledger_service.audit.AuditWriteException;
 import com.group2.fse.ledger_service.audit.LedgerAuditWriter;
 
+/**
+ * @deprecated As of FSE-304/FSE-305, {@link com.group2.fse.ledger_service.service.DualWriteLedgerAuditService}
+ * is the active, unified dual-write audit component providing hash-chaining and transaction logging.
+ */
+@Deprecated(since = "FSE-305", forRemoval = true)
 @Component
 public class PostgresLedgerAuditWriter implements LedgerAuditWriter {
 
-    // Do NOT include previous_hash/current_hash -- trg_compute_ledger_hash_chain
-    // (03_audit_triggers.sql) fills those in BEFORE INSERT.
     private static final String INSERT_SQL =
         "INSERT INTO audit_store.ledger_mutation_audit " +
         "(transaction_id, account_id, transaction_type, amount, old_balance, new_balance, actor_id, client_ip) " +
@@ -43,8 +46,6 @@ public class PostgresLedgerAuditWriter implements LedgerAuditWriter {
                 actorId, clientIp
             );
         } catch (DataAccessException ex) {
-            // Unchecked on purpose: DualWriteCoordinator's catch block should
-            // trigger CompensationManager. Do not swallow this.
             throw new AuditWriteException(
                 "Failed to write audit record for account " + accountId
                     + " (txn " + transactionId + "): " + ex.getMessage(), ex);

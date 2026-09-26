@@ -57,14 +57,14 @@ INSERT INTO BALANCE (account_id, available_balance) VALUES (2, 25000.0000);
 INSERT INTO BALANCE (account_id, available_balance) VALUES (3, 100000.0000);
 
 -- 7. SEED INITIAL OPENING TRANSACTIONS
-INSERT INTO "TRANSACTION" (account_id, transaction_type, amount, previous_balance, new_balance, status, approved_by)
-VALUES (1, 'INITIAL_DEPOSIT', 50000.0000, 0.0000, 50000.0000, 'COMPLETED', 1);
+INSERT INTO "TRANSACTION" (account_id, reference_no, transaction_type, amount, previous_balance, new_balance, status, approved_by)
+VALUES (1, 'REF-INIT-001', 'INITIAL_DEPOSIT', 50000.0000, 0.0000, 50000.0000, 'COMPLETED', 1);
 
-INSERT INTO "TRANSACTION" (account_id, transaction_type, amount, previous_balance, new_balance, status, approved_by)
-VALUES (2, 'INITIAL_DEPOSIT', 25000.0000, 0.0000, 25000.0000, 'COMPLETED', 1);
+INSERT INTO "TRANSACTION" (account_id, reference_no, transaction_type, amount, previous_balance, new_balance, status, approved_by)
+VALUES (2, 'REF-INIT-002', 'INITIAL_DEPOSIT', 25000.0000, 0.0000, 25000.0000, 'COMPLETED', 1);
 
-INSERT INTO "TRANSACTION" (account_id, transaction_type, amount, previous_balance, new_balance, status, approved_by)
-VALUES (3, 'INITIAL_DEPOSIT', 100000.0000, 0.0000, 100000.0000, 'COMPLETED', 1);
+INSERT INTO "TRANSACTION" (account_id, reference_no, transaction_type, amount, previous_balance, new_balance, status, approved_by)
+VALUES (3, 'REF-INIT-003', 'INITIAL_DEPOSIT', 100000.0000, 0.0000, 100000.0000, 'COMPLETED', 1);
 
 -- 8. SEED INITIAL TRANSACTION AUDITS
 INSERT INTO TRANSACTION_AUDIT (transaction_id, account_id, transaction_type, amount, old_balance, new_balance)

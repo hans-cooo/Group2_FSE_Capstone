@@ -243,6 +243,9 @@ jobs:
       - name: Prepare environment configuration
         run: |
           cp .env.example .env
+          cp .env backend/ledger-service/.env || true
+          echo "Environment configuration prepared from .env.example:"
+          grep -E "ORACLE_PORT|POSTGRES_PORT|REDIS_PORT|KAFKA_PORT" .env
 
       - name: Set up Java 21 JDK (Temurin)
         uses: actions/setup-java@v4
@@ -251,10 +254,10 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
 
-      - name: Spin up Database & Cache Infrastructure via Docker Compose
+      - name: Spin up Database, Cache & Messaging Infrastructure via Docker Compose
         run: |
-          echo "Starting Oracle XE, PostgreSQL and Redis containers..."
-          docker compose up -d oracle-core-db postgres-audit-db redis-cache
+          echo "Starting Oracle XE, PostgreSQL, Redis, and Kafka containers..."
+          docker compose up -d oracle-core-db postgres-audit-db redis-cache kafka-broker kafka-init-topics
 
           echo "Waiting for Redis to become healthy..."
           timeout 45s bash -c '
@@ -272,19 +275,39 @@ jobs:
           '
           echo "PostgreSQL is healthy."
 
-      - name: Wait for Oracle XEPDB1 service
+          echo "Waiting for Kafka broker to become healthy..."
+          timeout 60s bash -c '
+            until docker exec kafka-broker /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1; do
+              sleep 3
+            done
+          '
+          echo "Kafka broker is healthy."
+
+      - name: Wait for Oracle XE and XEPDB1 service
         run: |
           set -euo pipefail
+          set -a
+          # shellcheck disable=SC1091
+          source .env
+          set +a
 
-          echo "Waiting for Oracle XE XEPDB1 to accept connections..."
+          echo "Waiting for Oracle XE listener..."
+          timeout 60s bash -c '
+            until docker exec oracle-core-db bash -lc "lsnrctl status 2>/dev/null | grep -qi LISTENING"; do
+              echo "Waiting for Oracle listener..."
+              sleep 3
+            done
+          '
+          echo "Oracle listener is operational."
 
-          timeout 360s bash -c '
+          echo "Waiting for Oracle XE XEPDB1 and application user login..."
+          timeout 300s bash -c '
             until docker exec oracle-core-db bash -lc "
               printf \"WHENEVER SQLERROR EXIT SQL.SQLCODE\\nSELECT 1 FROM dual;\\nEXIT;\\n\" |
-              sqlplus -L -s core_user/CorePassword123!@//localhost:1521/XEPDB1 |
+              sqlplus -L -s \"\${APP_USER}/\${APP_USER_PASSWORD}@//localhost:1521/\${ORACLE_DATABASE}\" |
               grep -Eq \"^[[:space:]]*1[[:space:]]*$\"
             "; do
-              echo "XEPDB1 is not ready yet..."
+              echo "XEPDB1 pluggable database initializing (cold boot ~45-60s)..."
               sleep 5
             done
           '
@@ -310,16 +333,38 @@ jobs:
 
       - name: Verify Oracle port reachable from runner host
         run: |
-          timeout 60s bash -c '
-            until nc -z 127.0.0.1 1521; do
-              echo "Waiting for port 1521 on runner..."
-              sleep 2
-            done
-          '
-          echo "Oracle port 1521 is reachable from the GitHub runner."
+          set -euo pipefail
+          set -a
+          # shellcheck disable=SC1091
+          source .env
+          set +a
+
+          PORT="${ORACLE_PORT:-1522}"
+          echo "Verifying Oracle on runner host port ${PORT}..."
+
+          READY=false
+          for i in $(seq 1 30); do
+            if nc -z 127.0.0.1 "$PORT" 2>/dev/null; then
+              READY=true
+              break
+            fi
+            echo "Waiting for port ${PORT} on runner (attempt $i/30)..."
+            sleep 2
+          done
+
+          if [ "$READY" = "false" ]; then
+            echo "ERROR: Oracle port ${PORT} was not reachable on runner host after 60 seconds."
+            exit 1
+          fi
+
+          echo "Oracle port ${PORT} is reachable from the GitHub runner."
 
       - name: Compile and Run Full Backend Test Suite
         run: |
+          set -a
+          # shellcheck disable=SC1091
+          source .env
+          set +a
           cd backend/ledger-service
           chmod +x mvnw
           ./mvnw clean test -B --no-transfer-progress

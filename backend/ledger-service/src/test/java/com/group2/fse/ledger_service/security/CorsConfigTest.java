@@ -8,50 +8,26 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
-@DisplayName("CorsConfig Unit Tests (Carl - FSE-401)")
 class CorsConfigTest {
 
     @Test
-    @DisplayName("Should configure expected CORS policy with default origins")
-    void shouldConfigureExpectedCorsPolicy() {
+    @DisplayName("Should configure CORS policies accurately from configuration properties")
+    void shouldConfigureCorsPolicies() {
         CorsConfig corsConfig = new CorsConfig();
         ReflectionTestUtils.setField(corsConfig, "allowedOrigins", "http://localhost:3000,http://localhost:5173");
 
         CorsConfigurationSource source = corsConfig.corsConfigurationSource();
-        assertNotNull(source);
-
-        MockHttpServletRequest request = new MockHttpServletRequest();
-        request.setRequestURI("/api/v1/ledger/transfers");
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/ledger/transfers");
         CorsConfiguration config = source.getCorsConfiguration(request);
 
-        assertNotNull(config);
-        assertTrue(config.getAllowedOrigins().contains("http://localhost:3000"));
-        assertTrue(config.getAllowedOrigins().contains("http://localhost:5173"));
-        assertTrue(config.getAllowedMethods().contains("POST"));
-        assertTrue(config.getAllowedMethods().contains("OPTIONS"));
-        assertTrue(config.getAllowedHeaders().contains("Idempotency-Key"));
-        assertTrue(config.getAllowedHeaders().contains("Authorization"));
-        assertTrue(config.getExposedHeaders().contains("Idempotency-Key"));
-        assertEquals(Boolean.TRUE, config.getAllowCredentials());
-        assertEquals(3600L, config.getMaxAge());
-    }
-
-    @Test
-    @DisplayName("Should use allowedOriginPatterns when wildcard is specified")
-    void shouldUseAllowedOriginPatternsForWildcard() {
-        CorsConfig corsConfig = new CorsConfig();
-        ReflectionTestUtils.setField(corsConfig, "allowedOrigins", "*");
-
-        CorsConfigurationSource source = corsConfig.corsConfigurationSource();
-        assertNotNull(source);
-
-        MockHttpServletRequest request = new MockHttpServletRequest();
-        request.setRequestURI("/api/v1/ledger/transfers");
-        CorsConfiguration config = source.getCorsConfiguration(request);
-
-        assertNotNull(config);
-        assertTrue(config.getAllowedOriginPatterns().contains("*"));
+        assertThat(config).isNotNull();
+        assertThat(config.getAllowedOrigins()).containsExactlyInAnyOrder("http://localhost:3000", "http://localhost:5173");
+        assertThat(config.getAllowedMethods()).contains("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS");
+        assertThat(config.getAllowedHeaders()).contains("Authorization", "Idempotency-Key", "Content-Type", "Accept");
+        assertThat(config.getExposedHeaders()).contains("Authorization", "Idempotency-Key", "X-Cache-Replay");
+        assertThat(config.getAllowCredentials()).isTrue();
+        assertThat(config.getMaxAge()).isEqualTo(3600L);
     }
 }

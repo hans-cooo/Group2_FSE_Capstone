@@ -1,5 +1,10 @@
 package com.group2.fse.ledger_service.security.config;
 
+import com.group2.fse.ledger_service.security.blacklist.TokenBlacklistFilter;
+import com.group2.fse.ledger_service.security.blacklist.TokenBlacklistService;
+import com.group2.fse.ledger_service.security.filter.JwtAuthenticationFilter;
+import com.group2.fse.ledger_service.security.handler.CustomAccessDeniedHandler;
+import com.group2.fse.ledger_service.security.handler.CustomAuthenticationEntryPoint;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -10,17 +15,13 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfigurationSource;
 
 /**
  * Stateless Spring Security Configuration.
- * Assigned to: Carl (FSE-401)
- *
- * Establishes stateless bearer perimeter, CORS configuration, and endpoint access rules.
- * Does not touch or initialize any collaborator packages.
- * Integration of collaborator filter beans (JwtAuthenticationFilter, TokenBlacklistFilter,
- * CustomAuthenticationEntryPoint, CustomAccessDeniedHandler) will take place during
- * the assembly phase once those components are published by their respective assignees.
+ * Enforces stateless JWT bearer perimeter, distributed token revocation blacklist,
+ * RFC-7807 problem details error handling, and secure CORS policies.
  */
 @Configuration
 @EnableWebSecurity
@@ -29,6 +30,10 @@ import org.springframework.web.cors.CorsConfigurationSource;
 public class SecurityConfig {
 
     private final CorsConfigurationSource corsConfigurationSource;
+    private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final TokenBlacklistService tokenBlacklistService;
+    private final CustomAuthenticationEntryPoint customAuthenticationEntryPoint;
+    private final CustomAccessDeniedHandler customAccessDeniedHandler;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -36,11 +41,17 @@ public class SecurityConfig {
                 // Disable CSRF for stateless REST APIs
                 .csrf(AbstractHttpConfigurer::disable)
 
-                // Enable CORS with dedicated configuration
+                // Enable CORS with custom configuration
                 .cors(cors -> cors.configurationSource(corsConfigurationSource))
 
                 // Enforce stateless session management
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+
+                // Configure standard RFC-7807 error responses
+                .exceptionHandling(exceptions -> exceptions
+                        .authenticationEntryPoint(customAuthenticationEntryPoint)
+                        .accessDeniedHandler(customAccessDeniedHandler)
+                )
 
                 // Configure endpoint authorization rules
                 .authorizeHttpRequests(auth -> auth
@@ -56,7 +67,11 @@ public class SecurityConfig {
                         ).permitAll()
                         .requestMatchers("/api/v1/ledger/**").authenticated()
                         .anyRequest().authenticated()
-                );
+                )
+
+                // Register JWT authentication and token blacklist filters in canonical order
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterAfter(new TokenBlacklistFilter(tokenBlacklistService), JwtAuthenticationFilter.class);
 
         return http.build();
     }

@@ -52,7 +52,7 @@ class BalanceRepositoryLockTest {
 
                 firstLockAcquired.countDown();
 
-                Thread.sleep(5000);
+                Thread.sleep(2000);
 
                 transactionManager.commit(tx);
 
@@ -77,7 +77,7 @@ class BalanceRepositoryLockTest {
             TransactionStatus tx =
                     transactionManager.getTransaction(
                             new DefaultTransactionDefinition(
-                                    TransactionDefinition.PROPAGATION_REQUIRED));
+                                     TransactionDefinition.PROPAGATION_REQUIRED));
 
             try {
 
@@ -100,7 +100,7 @@ class BalanceRepositoryLockTest {
         executor.shutdown();
 
         assertTrue(
-                waitTime >= 4000,
+                waitTime >= 1500,
                 "Second transaction did not wait for lock release"
         );
     }

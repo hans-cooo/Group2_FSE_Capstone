@@ -1,121 +1,139 @@
-# Implementation Plan: FSE-401 Stateless Spring Security Configuration
+# Implementation Plan: Production-Ready Ledger Engine Service & Security Perimeter
 
 ## Overview
-Implement **FSE-401: Stateless Spring Security Configuration** for the `ledger-service`. This establishes the perimeter security boundary for Sprint 2 (Epic D: Perimeter Token Security). The configuration enforces stateless session management (`SessionCreationPolicy.STATELESS`), disables CSRF for REST APIs, configures secure CORS policies, establishes endpoint access rules, and orchestrates the security filter sequence without causing merge conflicts with team members (Jared, Gabriel, Alyssa, Hans).
+Transform `backend/ledger-service` into an enterprise-grade, high-concurrency, secure Core Ledger Engine microservice in full alignment with the project specifications (`API_DESIGN_SPECIFICATION.md`, `KUBERNETES_CORE_BANKING_ARCHITECTURE_V2.md`, and `ENTERPRISE_ARCHITECTURE_DEFENSE_DOSSIER.md`). 
+
+The implementation covers:
+1. **Stateless JWT Security Perimeter & Distributed Blacklist (Epic D / FSE-401, 402, 404, 405)**: RSA256/HMAC JWT validation, Redis token revocation blacklist, RFC-7807 problem details error responses, and CORS filtering.
+2. **Double-Entry Atomic Transfer & Concurrency Defense (Epic C / FSE-306)**: Pessimistic write locks with strict account ID ordering to prevent database deadlocks, strict non-negative balance invariant ($B_{\text{rem}} \ge 0$), paired double-entry ledger transactions, and synchronous dual-write auditing to PostgreSQL.
+3. **Enterprise REST Controllers & Exception Advice (Epic D / FSE-403)**: Authoritative REST controllers for mutations (`/debit`, `/credit`), transfers (`/transfer`), and cached balance lookups (`/balance/{id}`), with global RFC-7807 exception handling.
+4. **Distributed Idempotency & Response Replay (Epic C / FSE-307)**: Redis-backed distributed locks and 24-hour response caching replaying identical responses with `X-Cache-Replay: true` on duplicate submissions.
+5. **Asynchronous Kafka Event Streaming (Epic E / FSE-501)**: Transactional event publisher emitting `ledger.mutation.completed.v1` post-commit.
+6. **Concurrency & Integration Stress Validation**: Verification of multithreaded cross-transfers and CI/CD compatibility.
 
 ---
 
-## Architecture Decisions & Strategy
+## Architecture Decisions & Invariants
 
-1. **Zero-Overlap Decoupled Filter Architecture**:
-   - Carl owns `com.group2.fse.ledger_service.security.config` (`SecurityConfig.java` and `CorsConfig.java`).
-   - Collaborators implement independent `@Component` beans (`JwtAuthenticationFilter` by Jared, `TokenBlacklistFilter` by Gabriel, `CustomAuthenticationEntryPoint` and `CustomAccessDeniedHandler` by Alyssa).
-   - In `SecurityConfig.java`, inject collaborator beans using optional or missing-bean fallbacks (`@Autowired(required = false)` or basic placeholder stubs) so Carl's branch compiles and runs 100% independently in CI/CD before teammates merge their branches.
-
-2. **Canonical Filter Pipeline Ordering**:
+1. **Microservices Deployment Model**:
+   - `ledger-service` is an independent Spring Boot 4.x service containerized and deployed to Kubernetes `core-banking` namespace.
+   - It maintains its dedicated Oracle transactional store (`BALANCE`, `TRANSACTION`) and dual-writes compliance records to PostgreSQL (`LEDGER_AUDIT_LOG`).
+2. **Financial Math & Immutability**:
+   - All balance mutations strictly utilize `BigDecimal` with 4 decimal places (`NUMBER(18, 4)` / `scale = 4`).
+   - Zero-overdraft invariant is absolute: $B_{\text{rem}} = B_{\text{curr}} - \text{Amount} \ge 0.0000$.
+   - Transfers generate two paired `TRANSACTION` records sharing a unique `referenceNo` (`DEBIT` on source, `CREDIT` on destination).
+3. **Deadlock Prevention via Strict Lock Ordering**:
+   - When acquiring locks across multiple accounts in a transfer:
+     $$\text{lockAcquisitionOrder} = [\min(\text{srcId}, \text{dstId}), \max(\text{srcId}, \text{dstId})]$$
+   - Accompanied by Oracle row lock timeout hints (`jakarta.persistence.lock.timeout = 5000ms`) to fail gracefully rather than stall threads.
+4. **Dual-Write Rollback Guarantee**:
+   - PostgreSQL audit write is executed within the same Spring `@Transactional` boundary before Oracle commit. If PostgreSQL write fails, the entire transaction rolls back; if Oracle rollback occurs, no PostgreSQL commit is made.
+   - Remove redundant `PostgresLedgerAuditWriter` and obsolete `CompensationManager` to unify on `DualWriteLedgerAuditService`.
+5. **Canonical Security Filter Order**:
    ```
    Client HTTP Request
           │
           ▼
-   1. JwtAuthenticationFilter (FSE-402 - Jared)
-          │  [Validates Bearer token signature, extracts claims]
+   1. JwtAuthenticationFilter (validates Authorization Bearer token, extracts claims, sets SecurityContext)
+          │
           ▼
-   2. TokenBlacklistFilter (FSE-404 - Gabriel)
-          │  [Checks Redis blacklist by jti]
+   2. TokenBlacklistFilter (checks Redis blacklist by jti / token hash; returns 401 if revoked)
+          │
           ▼
-   3. IdempotencyInterceptor (FSE-301 - Carl, already in dev)
-          │  [Pre-flight Redis lock & duplicate check]
+   3. IdempotencyInterceptor (Spring MVC pre-handle checks Redis for in-flight / cached idempotency key)
+          │
           ▼
-   4. Controller & Method Security (FSE-403 - Hans)
-             [@PreAuthorize role checks]
+   4. RestController (Controller execution & method-level security)
+          │
+          ▼
+   5. Idempotency Response Cache (post-handle caches 2xx responses in Redis with 24h TTL)
    ```
-   Filter registration order:
-   ```java
-   http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
-       .addFilterAfter(tokenBlacklistFilter, JwtAuthenticationFilter.class);
-   ```
-
-3. **Stateless Endpoint Authorization Rules**:
-   - Permitted endpoints: `/actuator/health`, `/swagger-ui/**`, `/v3/api-docs/**`, `/error` $\rightarrow$ `permitAll()`
-   - Protected banking API endpoints: `/api/v1/ledger/**` $\rightarrow$ `authenticated()`
-   - All other endpoints: `authenticated()`
-
-4. **Preserving Existing Test Integrity**:
-   - Adding `spring-boot-starter-security` automatically activates default security for all endpoints in Spring Boot context tests.
-   - We must provide `spring-security-test` with `@WithMockUser` annotations or test security exclusions so existing tests (like `IdempotencyInterceptorTest`) remain completely unaffected.
+6. **Standard RFC-7807 Error Envelope**:
+   - All HTTP error responses adhere to `application/problem+json` standard format with `type`, `title`, `status`, `detail`, `instance`, `errorCode`, and `timestamp`.
 
 ---
 
-## Detailed Task Breakdown
+## Phased Master Task List
 
-### Phase 1: Environment & Dependency Setup
-- [ ] **Task 1.1: Git Branch Setup**
-  - Pull latest `origin/dev`.
-  - Create feature branch `feat/FSE-401-carl-security-config`.
-- [ ] **Task 1.2: Maven Dependencies Update**
-  - Add `spring-boot-starter-security` to `backend/ledger-service/pom.xml`.
-  - Add `spring-security-test` with `test` scope.
-  - Verify Maven compilation with `./mvnw compile`.
+### Phase 1: Security Perimeter & JWT Authentication Pipeline
+- [x] Task 1.1: Security & JJWT Maven Dependencies Setup
+- [x] Task 1.2: JWT Utilities & Claims Parser (`JwtTokenProvider`)
+- [x] Task 1.3: Stateless JWT Authentication Filter (`JwtAuthenticationFilter`)
+- [x] Task 1.4: Distributed Token Blacklist Integration (`TokenBlacklistFilter` & `RedisTokenBlacklistServiceImpl`)
+- [x] Task 1.5: RFC-7807 Security Exception Handlers (`CustomAuthenticationEntryPoint`, `CustomAccessDeniedHandler`)
+- [x] Task 1.6: SecurityFilterChain & CORS Configuration (`SecurityConfig`, `CorsConfig`)
 
-### Checkpoint: Dependencies & Build Ready
-- [ ] Application compiles cleanly with Spring Security dependencies present.
-
----
-
-### Phase 2: Decoupling Stubs & Contract Interfaces
-- [ ] **Task 2.1: Collaborator Component Stubs / Declarations**
-  - Create package `com.group2.fse.ledger_service.security.config`.
-  - Implement contract stubs or fallback beans for:
-    - `JwtAuthenticationFilter` (FSE-402 stub)
-    - `TokenBlacklistFilter` (FSE-404 stub)
-    - `CustomAuthenticationEntryPoint` & `CustomAccessDeniedHandler` (FSE-405 stubs)
-  - Ensure real beans will cleanly override these stubs once teammates merge.
+### Checkpoint 1: Security Perimeter Verified
+- [x] Public routes (`/actuator/health`, Swagger docs) accessible without credentials.
+- [x] Protected routes (`/api/v1/ledger/**`) reject unauthenticated requests with RFC-7807 401 Unauthorized.
+- [x] Revoked tokens in Redis return RFC-7807 401 Token Revoked.
+- [x] Valid Bearer tokens establish authenticated `SecurityContext` with extracted authorities.
 
 ---
 
-### Phase 3: Core Security & CORS Implementation
-- [ ] **Task 3.1: Implement `CorsConfig.java`**
-  - Define `CorsConfigurationSource` bean.
-  - Configure allowed origins (from `app.cors.allowed-origins` property or banking defaults), methods (`GET`, `POST`, `PUT`, `DELETE`, `OPTIONS`), headers (`Authorization`, `Idempotency-Key`, `Content-Type`), and cache max-age (3600s).
-- [ ] **Task 3.2: Implement `SecurityConfig.java`**
-  - Annotate with `@Configuration` and `@EnableWebSecurity`.
-  - Configure `SecurityFilterChain`:
-    - `csrf(AbstractHttpConfigurer::disable)`
-    - `sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))`
-    - `cors(c -> c.configurationSource(corsConfigurationSource()))`
-    - `authorizeHttpRequests(...)`
-    - Exception handling delegating to custom entry point and access denied handler.
-    - Filter registration order wiring.
+### Phase 2: Double-Entry Atomic Transfer & Concurrency Defense
+- [x] Task 2.1: Deadlock-Free Ordered Pessimistic Locking Queries (`BalanceRepository`)
+- [x] Task 2.2: DTOs & Validation Contracts (`TransferRequestDto`, `DebitCreditRequestDto`, Responses)
+- [x] Task 2.3: Double-Entry Atomic Transfer Service Implementation (`AccountBalanceServiceImpl.executeTransfer`)
+- [x] Task 2.4: Dual-Write Audit Cleanup & Consolidation (Retire redundant classes)
 
-### Checkpoint: Security Configuration Compiles
-- [ ] `SecurityConfig` and `CorsConfig` build with `./mvnw compile`.
+### Checkpoint 2: Atomic Transfer & Concurrency Verified
+- [x] Transfers debit source and credit destination in single atomic transaction.
+- [x] Cross-transfers between Account 1 and 2 do not deadlock.
+- [x] Transfers with insufficient funds abort with 422 Unprocessable Entity.
+- [x] Dual audit entries successfully written to PostgreSQL `LEDGER_AUDIT_LOG`.
 
 ---
 
-### Phase 4: Test Suite & Regression Verification
-- [ ] **Task 4.1: Unit & Security Slice Tests**
-  - Create `SecurityConfigTest.java` using `@SpringBootTest` or `@WebMvcTest`.
-  - Verify unauthenticated requests to `/api/v1/ledger/test` return `401 Unauthorized`.
-  - Verify requests to `/actuator/health` return `200 OK` without credentials.
-  - Verify CORS pre-flight `OPTIONS` requests receive appropriate CORS headers.
-- [ ] **Task 4.2: Existing Test Suite Regression**
-  - Run `IdempotencyInterceptorTest` to confirm 5/5 tests continue to pass.
-  - Run full test suite `./mvnw test` to ensure zero regressions across all modules.
+### Phase 3: Production REST Controllers & RFC-7807 Global Exception Advice
+- [x] Task 3.1: Global Exception Handler Advice (`GlobalExceptionHandler`)
+- [x] Task 3.2: Authoritative Balance Mutations Controller (`LedgerMutationController`)
+- [x] Task 3.3: Atomic Fund Transfer Controller (`LedgerTransferController`)
+- [x] Task 3.4: High-Speed Cached Balance Controller (`BalanceController`)
+
+### Checkpoint 3: REST Layer Verified
+- [x] Endpoints `/api/v1/ledger/debit`, `/credit`, `/transfer`, `/balance/{accountId}` functional.
+- [x] Both singular and plural endpoints routed properly.
+- [x] Validation errors and domain errors return RFC-7807 compliant problem envelopes.
 
 ---
 
-### Phase 5: Documentation & PR Readiness
-- [ ] **Task 5.1: PR & Team Integration Hand-off**
-  - Verify clean git diff.
-  - Document bean extension points for Jared, Gabriel, and Alyssa in PR description.
+### Phase 4: Distributed Idempotency Caching & Response Replay
+- [ ] Task 4.1: Response Caching Wrapper Filter (`ContentCachingResponseWrapperFilter`)
+- [ ] Task 4.2: Idempotency Key 24h Response Replay & Error Cleanup (`IdempotencyInterceptor`)
+
+### Checkpoint 4: Distributed Idempotency Replay Verified
+- [ ] Re-sending same `Idempotency-Key` within 24h replays identical HTTP body and status with `X-Cache-Replay: true`.
+- [ ] In-flight locks released immediately if an unexpected exception occurs.
 
 ---
 
-## Risks & Mitigations
+### Phase 5: Asynchronous Kafka Domain Event Publishing
+- [x] Task 5.1: Spring Kafka Dependency & Broker Configuration
+- [x] Task 5.2: Transactional Event Publisher (`LedgerEventPublisher` & `ledger.mutation.completed.v1`)
+
+### Checkpoint 5: Domain Event Streaming Verified
+- [x] Event published to Kafka topic upon database commit.
+- [x] Zero events emitted when transaction rolls back due to failure.
+
+---
+
+### Phase 6: Comprehensive Concurrency, Deadlock & E2E Validation
+- [x] Task 6.1: High-Concurrency Multithreaded Cross-Transfer Stress Tests
+- [x] Task 6.2: End-to-End Suite Regression & CI/CD Validation
+
+### Final Checkpoint: Microservice Sealed & Ready for Review
+- [x] 100% test pass rate across all unit, integration, and concurrency tests (99/99 passed).
+- [x] Zero merge conflicts with `dev` branch.
+
+---
+
+## Risks and Mitigations
 
 | Risk | Impact | Mitigation |
 | :--- | :---: | :--- |
-| **Spring Security breaks existing MockMvc tests** | High | Add `spring-security-test` and use `@WithMockUser` or test security bypass configurations for existing unit tests. |
-| **Teammate filters aren't ready when wiring filter chain** | Medium | Use conditional injection (`@Autowired(required = false)`) so `SecurityConfig` operates gracefully whether filters are present or pending. |
-| **Filter sequence misconfiguration** | High | Strictly follow the documented sequence (`JwtAuthenticationFilter` before `UsernamePasswordAuthenticationFilter`, `TokenBlacklistFilter` after `JwtAuthenticationFilter`). |
-| **CORS blocking pre-flight requests** | Medium | Explicitly permit `HttpMethod.OPTIONS` and integrate `CorsConfigurationSource` directly into `http.cors()`. |
+| **Spring Security breaks existing MockMvc slice tests** | High | Include `spring-security-test`, annotate MockMvc tests with `@WithMockUser(roles = "TELLER")` or use test security configs. |
+| **Host Port 1521 Oracle conflict on Windows** | High | Ensure test profiles and local run configurations reference `ORACLE_PORT=1522`. |
+| **Database deadlock under concurrent cross-transfers** | Critical | Enforce strict numeric account ID ordering `min(src, dst)` then `max(src, dst)` prior to acquiring locks. |
+| **Partial write in dual-write audit logging** | Critical | Place PostgreSQL append and Oracle mutation in unified Spring `@Transactional` context; abort Oracle if Postgres append fails. |
+| **Redis connection loss blocking transactions** | Medium | Implement fast timeout failover and structured exception mapping for Redis calls. |

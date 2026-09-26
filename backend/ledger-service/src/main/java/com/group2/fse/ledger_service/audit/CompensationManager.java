@@ -6,14 +6,12 @@ import com.group2.fse.ledger_service.dto.MutationResult;
 import com.group2.fse.ledger_service.service.AccountBalanceService;
 
 /**
- * Fires a compensating (reversing) mutation against Oracle when the
- * PostgreSQL audit write fails after the primary balance mutation already
- * committed. This is NOT a real distributed-transaction rollback -- Oracle's
- * write already committed by the time we get here.
- *
- * Intended caller: Alyssa's DualWriteCoordinator, in the catch block around
- * LedgerAuditWriter#writeAuditRecord.
+ * @deprecated As of FSE-304 / FSE-305, synchronous transactional rollback via
+ * {@code @Transactional(rollbackFor = Exception.class)} and {@link com.group2.fse.ledger_service.service.DualWriteLedgerAuditService}
+ * is the authoritative mechanism. Asynchronous or catch-block compensating transactions are obsolete
+ * because Oracle state is cleanly rolled back before commit if the PostgreSQL audit write aborts.
  */
+@Deprecated(since = "FSE-305", forRemoval = true)
 @Component
 public class CompensationManager {
 
@@ -23,15 +21,6 @@ public class CompensationManager {
         this.accountBalanceService = accountBalanceService;
     }
 
-    /**
-     * Reverses a successful mutation by applying the opposite operation.
-     * Caller passes the original operation type explicitly since
-     * MutationResult doesn't carry it.
-     *
-     * @return the compensating MutationResult. If this itself fails, the
-     *         account is left inconsistent and must be escalated (e.g. via
-     *         AccountFlag/TransactionFlag) -- this does not retry indefinitely.
-     */
     public MutationResult compensate(MutationResult originalResult, String originalType) {
         if (originalResult == null || !originalResult.isSuccess()) {
             throw new IllegalArgumentException("Cannot compensate a null or failed mutation result.");
