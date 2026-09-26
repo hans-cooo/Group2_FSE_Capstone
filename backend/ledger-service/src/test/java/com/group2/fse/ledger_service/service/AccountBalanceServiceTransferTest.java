@@ -12,6 +12,8 @@ import com.group2.fse.ledger_service.exception.AccountNotFoundException;
 import com.group2.fse.ledger_service.exception.DualWriteAuditException;
 import com.group2.fse.ledger_service.exception.InsufficientFundsException;
 import com.group2.fse.ledger_service.exception.InvalidTransactionException;
+import com.group2.fse.ledger_service.event.LedgerMutationEvent;
+import com.group2.fse.ledger_service.event.LedgerTransferEvent;
 import com.group2.fse.ledger_service.repository.BalanceRepository;
 import com.group2.fse.ledger_service.repository.TransactionRepository;
 import com.group2.fse.ledger_service.service.impl.AccountBalanceServiceImpl;
@@ -44,6 +46,9 @@ class AccountBalanceServiceTransferTest {
 
     @Mock
     private DualWriteLedgerAuditService dualWriteAuditService;
+
+    @Mock
+    private org.springframework.context.ApplicationEventPublisher applicationEventPublisher;
 
     @InjectMocks
     private AccountBalanceServiceImpl balanceService;
@@ -267,4 +272,50 @@ class AccountBalanceServiceTransferTest {
         assertThat(balanceDto.getAvailableBalance()).isEqualByComparingTo("5000.0000");
         assertThat(balanceDto.getIsCached()).isFalse();
     }
+
+    @Test
+    @DisplayName("Should publish both mutation events and transfer event on transfer completion")
+    void shouldPublishDomainEventsOnTransferCompletion() {
+        TransferRequestDto request = TransferRequestDto.builder()
+                .sourceAccountId(10L)
+                .destinationAccountId(20L)
+                .amount(new BigDecimal("1000.0000"))
+                .referenceNo("TRF-EVENT-001")
+                .remarks("Event test transfer")
+                .build();
+
+        when(balanceRepository.findByAccountId(10L)).thenReturn(Optional.of(sourceBalance));
+        when(balanceRepository.findByAccountId(20L)).thenReturn(Optional.of(destBalance));
+        when(transactionRepository.save(any(Transaction.class))).thenAnswer(inv -> {
+            Transaction txn = inv.getArgument(0);
+            txn.setTransactionId(900L);
+            return txn;
+        });
+
+        balanceService.executeTransfer(request, 1L, "127.0.0.1");
+
+        // Verify two LedgerMutationEvents (one per leg) and one LedgerTransferEvent published
+        verify(applicationEventPublisher, times(2)).publishEvent(any(LedgerMutationEvent.class));
+        verify(applicationEventPublisher, times(1)).publishEvent(any(LedgerTransferEvent.class));
+    }
+
+    @Test
+    @DisplayName("Should not publish any events when transfer fails due to insufficient funds")
+    void shouldNotPublishEventsOnInsufficientFunds() {
+        TransferRequestDto request = TransferRequestDto.builder()
+                .sourceAccountId(10L)
+                .destinationAccountId(20L)
+                .amount(new BigDecimal("99999.0000"))
+                .referenceNo("TRF-FAIL-001")
+                .build();
+
+        when(balanceRepository.findByAccountId(10L)).thenReturn(Optional.of(sourceBalance));
+        when(balanceRepository.findByAccountId(20L)).thenReturn(Optional.of(destBalance));
+
+        assertThatThrownBy(() -> balanceService.executeTransfer(request, 1L, "127.0.0.1"))
+                .isInstanceOf(InsufficientFundsException.class);
+
+        verify(applicationEventPublisher, never()).publishEvent(any());
+    }
 }
+

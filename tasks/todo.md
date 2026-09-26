@@ -309,11 +309,11 @@
 ### Task 5.1: Spring Kafka Dependency & Broker Configuration
 **Description:** Add `spring-kafka` to `pom.xml` and configure Kafka producer settings in `application.properties`.
 **Acceptance criteria:**
-- [ ] `spring-kafka` added to `pom.xml`.
-- [ ] Producer configuration (`bootstrap-servers`, `key-serializer`, `value-serializer`) added to `application.properties`.
-- [ ] `KafkaProducerConfig` bean configured with `ProducerFactory` and `KafkaTemplate`.
+- [x] `spring-kafka` added to `pom.xml`.
+- [x] Producer configuration (`bootstrap-servers`, `key-serializer`, `value-serializer`) added to `application.properties`.
+- [x] `KafkaProducerConfig` bean configured with `ProducerFactory` and `KafkaTemplate`.
 **Verification:**
-- [ ] Build succeeds: `./mvnw compile`
+- [x] Build succeeds: `./mvnw compile`
 **Dependencies:** None
 **Files likely touched:**
 - `backend/ledger-service/pom.xml`
@@ -326,11 +326,11 @@
 ### Task 5.2: Transactional Event Publisher
 **Description:** Implement `LedgerEventPublisher` publishing `ledger.mutation.completed.v1` and `ledger.transfer.completed.v1` events via `@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)`.
 **Acceptance criteria:**
-- [ ] Event payloads match Section 6.2 of `API_DESIGN_SPECIFICATION.md`.
-- [ ] Event published only AFTER database transaction commits.
-- [ ] Zero events published if transaction rolls back.
+- [x] Event payloads match Section 6.2 of `API_DESIGN_SPECIFICATION.md`.
+- [x] Event published only AFTER database transaction commits.
+- [x] Zero events published if transaction rolls back.
 **Verification:**
-- [ ] Tests pass: `./mvnw test -Dtest=LedgerEventPublisherTest`
+- [x] Tests pass: `./mvnw test -Dtest=LedgerEventPublisherTest`
 **Dependencies:** Task 5.1, Task 2.3
 **Files likely touched:**
 - `backend/ledger-service/src/main/java/com/group2/fse/ledger_service/event/LedgerMutationEvent.java`
@@ -342,8 +342,8 @@
 ---
 
 ### Checkpoint: Domain Event Streaming Verified
-- [ ] Committed transactions emit Kafka domain events.
-- [ ] Rolled-back transactions emit nothing.
+- [x] Committed transactions emit Kafka domain events.
+- [x] Rolled-back transactions emit nothing.
 
 ---
 

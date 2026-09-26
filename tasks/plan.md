@@ -109,12 +109,12 @@ The implementation covers:
 ---
 
 ### Phase 5: Asynchronous Kafka Domain Event Publishing
-- [ ] Task 5.1: Spring Kafka Dependency & Broker Configuration
-- [ ] Task 5.2: Transactional Event Publisher (`LedgerEventPublisher` & `ledger.mutation.completed.v1`)
+- [x] Task 5.1: Spring Kafka Dependency & Broker Configuration
+- [x] Task 5.2: Transactional Event Publisher (`LedgerEventPublisher` & `ledger.mutation.completed.v1`)
 
 ### Checkpoint 5: Domain Event Streaming Verified
-- [ ] Event published to Kafka topic upon database commit.
-- [ ] Zero events emitted when transaction rolls back due to failure.
+- [x] Event published to Kafka topic upon database commit.
+- [x] Zero events emitted when transaction rolls back due to failure.
 
 ---
 

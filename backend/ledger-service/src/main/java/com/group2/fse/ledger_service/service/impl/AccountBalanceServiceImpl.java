@@ -10,6 +10,8 @@ import com.group2.fse.ledger_service.entity.Account;
 import com.group2.fse.ledger_service.entity.Balance;
 import com.group2.fse.ledger_service.entity.Transaction;
 import com.group2.fse.ledger_service.entity.User;
+import com.group2.fse.ledger_service.event.LedgerMutationEvent;
+import com.group2.fse.ledger_service.event.LedgerTransferEvent;
 import com.group2.fse.ledger_service.exception.AccountNotFoundException;
 import com.group2.fse.ledger_service.exception.InsufficientFundsException;
 import com.group2.fse.ledger_service.exception.InvalidTransactionException;
@@ -19,12 +21,15 @@ import com.group2.fse.ledger_service.service.AccountBalanceService;
 import com.group2.fse.ledger_service.service.DualWriteLedgerAuditService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Core Balance Mutation Engine coordinating Oracle Master SoR and PostgreSQL Forensic Audit Store.
@@ -34,6 +39,7 @@ import java.util.Optional;
  * - FSE-304: Simultaneous dual-write updates across Oracle and PostgreSQL
  * - FSE-305: Automated rollback via @Transactional(rollbackFor = Exception.class) on audit failure
  * - FSE-306: Deadlock-free ordered pessimistic row locking for multi-account atomic transfers
+ * - FSE-501: Transactional domain event publishing via ApplicationEventPublisher on AFTER_COMMIT
  */
 @Slf4j
 @Service
@@ -43,6 +49,7 @@ public class AccountBalanceServiceImpl implements AccountBalanceService {
     private final BalanceRepository balanceRepository;
     private final TransactionRepository transactionRepository;
     private final DualWriteLedgerAuditService dualWriteLedgerAuditService;
+    private final ApplicationEventPublisher applicationEventPublisher;
 
     // =========================================================================
     // Legacy methods preserved for backwards compatibility with existing tests
@@ -110,6 +117,18 @@ public class AccountBalanceServiceImpl implements AccountBalanceService {
                 clientIp
         );
 
+        publishMutationEvent(
+                txnId != null ? txnId : 0L,
+                accountId,
+                account != null ? account.getAccountNumber() : null,
+                "DEBIT",
+                amount,
+                currentBalance,
+                newBalance,
+                referenceNo,
+                account != null && account.getCustomer() != null ? account.getCustomer().getCustomerId() : null
+        );
+
         return MutationResult.success(accountId, referenceNo, txnId, currentBalance, newBalance, amount);
     }
 
@@ -169,6 +188,18 @@ public class AccountBalanceServiceImpl implements AccountBalanceService {
                 newBalance,
                 actorId,
                 clientIp
+        );
+
+        publishMutationEvent(
+                txnId != null ? txnId : 0L,
+                accountId,
+                account != null ? account.getAccountNumber() : null,
+                "CREDIT",
+                amount,
+                currentBalance,
+                newBalance,
+                referenceNo,
+                account != null && account.getCustomer() != null ? account.getCustomer().getCustomerId() : null
         );
 
         return MutationResult.success(accountId, referenceNo, txnId, currentBalance, newBalance, amount);
@@ -273,6 +304,42 @@ public class AccountBalanceServiceImpl implements AccountBalanceService {
                 dstId, "CREDIT", amount, dstPrev, dstNew, actorId, clientIp
         );
 
+        // Publish domain mutation events for both legs of the transfer
+        publishMutationEvent(
+                savedDebitTxn.getTransactionId() != null ? savedDebitTxn.getTransactionId() : 0L,
+                srcId,
+                srcAccount != null ? srcAccount.getAccountNumber() : null,
+                "DEBIT",
+                amount,
+                srcPrev,
+                srcNew,
+                refDebit,
+                srcAccount != null && srcAccount.getCustomer() != null ? srcAccount.getCustomer().getCustomerId() : null
+        );
+        publishMutationEvent(
+                savedCreditTxn.getTransactionId() != null ? savedCreditTxn.getTransactionId() : 0L,
+                dstId,
+                dstAccount != null ? dstAccount.getAccountNumber() : null,
+                "CREDIT",
+                amount,
+                dstPrev,
+                dstNew,
+                refCredit,
+                dstAccount != null && dstAccount.getCustomer() != null ? dstAccount.getCustomer().getCustomerId() : null
+        );
+
+        // Publish transfer completed event
+        publishTransferEvent(
+                ref,
+                srcId,
+                dstId,
+                amount,
+                srcPrev,
+                srcNew,
+                dstPrev,
+                dstNew
+        );
+
         log.info("Atomic transfer completed: ref={}, src={} ({} -> {}), dst={} ({} -> {}), amount={}",
                 ref, srcId, srcPrev, srcNew, dstId, dstPrev, dstNew, amount);
 
@@ -332,6 +399,18 @@ public class AccountBalanceServiceImpl implements AccountBalanceService {
                 txnId, accountId, "DEBIT", amount, currentBalance, newBalance, actorId, clientIp
         );
 
+        publishMutationEvent(
+                txnId,
+                accountId,
+                account != null ? account.getAccountNumber() : null,
+                "DEBIT",
+                amount,
+                currentBalance,
+                newBalance,
+                ref,
+                account != null && account.getCustomer() != null ? account.getCustomer().getCustomerId() : null
+        );
+
         return DebitCreditResponseDto.builder()
                 .transactionId(txnId)
                 .accountId(accountId)
@@ -383,6 +462,18 @@ public class AccountBalanceServiceImpl implements AccountBalanceService {
                 txnId, accountId, "CREDIT", amount, currentBalance, newBalance, actorId, clientIp
         );
 
+        publishMutationEvent(
+                txnId,
+                accountId,
+                account != null ? account.getAccountNumber() : null,
+                "CREDIT",
+                amount,
+                currentBalance,
+                newBalance,
+                ref,
+                account != null && account.getCustomer() != null ? account.getCustomer().getCustomerId() : null
+        );
+
         return DebitCreditResponseDto.builder()
                 .transactionId(txnId)
                 .accountId(accountId)
@@ -410,5 +501,69 @@ public class AccountBalanceServiceImpl implements AccountBalanceService {
                 .asOfTimestamp(Instant.now())
                 .isCached(false)
                 .build();
+    }
+
+    private void publishMutationEvent(
+            Long txnId,
+            Long accountId,
+            String accountNumber,
+            String txnType,
+            BigDecimal amount,
+            BigDecimal prevBalance,
+            BigDecimal newBalance,
+            String referenceNo,
+            Long customerId) {
+        if (applicationEventPublisher != null) {
+            LedgerMutationEvent event = LedgerMutationEvent.builder()
+                    .eventId("evt_" + UUID.randomUUID())
+                    .eventType("LEDGER_MUTATION_COMPLETED")
+                    .timestamp(Instant.now())
+                    .version("1.0")
+                    .payload(LedgerMutationEvent.MutationPayload.builder()
+                            .transactionId(txnId)
+                            .accountId(accountId)
+                            .accountNumber(accountNumber)
+                            .transactionType(txnType)
+                            .amount(amount != null ? amount.setScale(4, RoundingMode.HALF_UP) : null)
+                            .previousBalance(prevBalance != null ? prevBalance.setScale(4, RoundingMode.HALF_UP) : null)
+                            .newBalance(newBalance != null ? newBalance.setScale(4, RoundingMode.HALF_UP) : null)
+                            .referenceNo(referenceNo)
+                            .customerId(customerId)
+                            .build())
+                    .build();
+            applicationEventPublisher.publishEvent(event);
+            log.debug("Enqueued Spring application event LedgerMutationEvent for account {}", accountId);
+        }
+    }
+
+    private void publishTransferEvent(
+            String transferReference,
+            Long srcId,
+            Long dstId,
+            BigDecimal amount,
+            BigDecimal srcPrev,
+            BigDecimal srcNew,
+            BigDecimal dstPrev,
+            BigDecimal dstNew) {
+        if (applicationEventPublisher != null) {
+            LedgerTransferEvent event = LedgerTransferEvent.builder()
+                    .eventId("evt_" + UUID.randomUUID())
+                    .eventType("LEDGER_TRANSFER_COMPLETED")
+                    .timestamp(Instant.now())
+                    .version("1.0")
+                    .payload(LedgerTransferEvent.TransferPayload.builder()
+                            .transferReference(transferReference)
+                            .sourceAccountId(srcId)
+                            .destinationAccountId(dstId)
+                            .amount(amount != null ? amount.setScale(4, RoundingMode.HALF_UP) : null)
+                            .sourcePreviousBalance(srcPrev != null ? srcPrev.setScale(4, RoundingMode.HALF_UP) : null)
+                            .sourceNewBalance(srcNew != null ? srcNew.setScale(4, RoundingMode.HALF_UP) : null)
+                            .destinationPreviousBalance(dstPrev != null ? dstPrev.setScale(4, RoundingMode.HALF_UP) : null)
+                            .destinationNewBalance(dstNew != null ? dstNew.setScale(4, RoundingMode.HALF_UP) : null)
+                            .build())
+                    .build();
+            applicationEventPublisher.publishEvent(event);
+            log.debug("Enqueued Spring application event LedgerTransferEvent for ref {}", transferReference);
+        }
     }
 }
