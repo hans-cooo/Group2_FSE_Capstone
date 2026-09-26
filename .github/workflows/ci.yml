@@ -243,6 +243,7 @@ jobs:
       - name: Prepare environment configuration
         run: |
           cp .env.example .env
+          cp .env backend/ledger-service/.env || true
           echo "Environment configuration prepared from .env.example:"
           grep -E "ORACLE_PORT|POSTGRES_PORT|REDIS_PORT|KAFKA_PORT" .env
 
@@ -274,19 +275,31 @@ jobs:
           '
           echo "PostgreSQL is healthy."
 
-      - name: Wait for Oracle XEPDB1 service
+      - name: Wait for Oracle XE and XEPDB1 service
         run: |
           set -euo pipefail
+          set -a
+          # shellcheck disable=SC1091
+          source .env
+          set +a
 
-          echo "Waiting for Oracle XE XEPDB1 to accept connections..."
+          echo "Waiting for Oracle XE listener..."
+          timeout 60s bash -c '
+            until docker exec oracle-core-db bash -lc "lsnrctl status 2>/dev/null | grep -qi LISTENING"; do
+              echo "Waiting for Oracle listener..."
+              sleep 3
+            done
+          '
+          echo "Oracle listener is operational."
 
-          timeout 360s bash -c '
+          echo "Waiting for Oracle XE XEPDB1 and application user login..."
+          timeout 300s bash -c '
             until docker exec oracle-core-db bash -lc "
               printf \"WHENEVER SQLERROR EXIT SQL.SQLCODE\\nSELECT 1 FROM dual;\\nEXIT;\\n\" |
-              sqlplus -L -s core_user/CorePassword123!@//localhost:1521/XEPDB1 |
+              sqlplus -L -s \"\${APP_USER}/\${APP_USER_PASSWORD}@//localhost:1521/\${ORACLE_DATABASE}\" |
               grep -Eq \"^[[:space:]]*1[[:space:]]*$\"
             "; do
-              echo "XEPDB1 is not ready yet..."
+              echo "XEPDB1 pluggable database initializing (cold boot ~45-60s)..."
               sleep 5
             done
           '
@@ -312,13 +325,19 @@ jobs:
 
       - name: Verify Oracle port reachable from runner host
         run: |
-          timeout 60s bash -c '
-            until nc -z 127.0.0.1 1521; do
-              echo "Waiting for port 1521 on runner..."
+          set -a
+          # shellcheck disable=SC1091
+          source .env
+          set +a
+          PORT="${ORACLE_PORT:-1522}"
+          echo "Verifying Oracle on runner host port $PORT..."
+          timeout 60s bash -c "
+            until nc -z 127.0.0.1 \$PORT; do
+              echo \"Waiting for port \$PORT on runner...\"
               sleep 2
             done
-          '
-          echo "Oracle port 1521 is reachable from the GitHub runner."
+          "
+          echo "Oracle port $PORT is reachable from the GitHub runner."
 
       - name: Compile and Run Full Backend Test Suite
         run: |
