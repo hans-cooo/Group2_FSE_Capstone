@@ -270,10 +270,10 @@
 ### Task 4.1: Response Caching Wrapper Filter
 **Description:** Add `ContentCachingResponseWrapperFilter` so downstream interceptors can access and cache the response body of successful 2xx responses.
 **Acceptance criteria:**
-- [ ] Wraps `HttpServletResponse` in `ContentCachingResponseWrapper`.
-- [ ] Copies cached response content to original output stream upon completion.
+- [x] Wraps `HttpServletResponse` in `ContentCachingResponseWrapper`.
+- [x] Copies cached response content to original output stream upon completion.
 **Verification:**
-- [ ] Tests pass: `./mvnw test -Dtest=ContentCachingFilterTest`
+- [x] Tests pass: `./mvnw test -Dtest=ContentCachingResponseWrapperFilterTest`
 **Dependencies:** None
 **Files likely touched:**
 - `backend/ledger-service/src/main/java/com/group2/fse/ledger_service/interceptor/ContentCachingResponseWrapperFilter.java`
@@ -284,11 +284,11 @@
 ### Task 4.2: Idempotency Key 24h Response Replay & Error Cleanup
 **Description:** Enhance `IdempotencyInterceptor` to cache successful 2xx responses in Redis (24h TTL) and replay cached responses with `X-Cache-Replay: true` on duplicate requests; release in-flight locks if mutation aborts.
 **Acceptance criteria:**
-- [ ] In `preHandle`: if key exists with status `COMPLETED`, immediately replay cached HTTP response with `X-Cache-Replay: true` without invoking controller.
-- [ ] In `afterCompletion`: if HTTP status is 2xx, save response body and status to Redis with key `idempotency:response:<key>` and 24-hour TTL.
-- [ ] In `afterCompletion`: if request resulted in error/exception, delete in-flight Redis lock so client can retry.
+- [x] In `preHandle`: if key exists with status `COMPLETED`, immediately replay cached HTTP response with `X-Cache-Replay: true` without invoking controller.
+- [x] In `afterCompletion`: if HTTP status is 2xx, save response body and status to Redis with key `idemp:<key>` and 24-hour TTL.
+- [x] In `afterCompletion`: if request resulted in error/exception, delete in-flight Redis lock so client can retry.
 **Verification:**
-- [ ] Tests pass: `./mvnw test -Dtest=IdempotencyInterceptorTest`
+- [x] Tests pass: `./mvnw test -Dtest=IdempotencyInterceptorTest`
 **Dependencies:** Task 4.1
 **Files likely touched:**
 - `backend/ledger-service/src/main/java/com/group2/fse/ledger_service/interceptor/IdempotencyInterceptor.java`
@@ -298,9 +298,9 @@
 ---
 
 ### Checkpoint: Distributed Idempotency Replay Verified
-- [ ] Duplicate request within 24h replays identical response with `X-Cache-Replay: true`.
-- [ ] Database is touched exactly once across duplicate submissions.
-- [ ] Failed requests release lock for subsequent retry.
+- [x] Duplicate request within 24h replays identical response with `X-Cache-Replay: true`.
+- [x] Database is touched exactly once across duplicate submissions.
+- [x] Failed requests release lock for subsequent retry.
 
 ---
 

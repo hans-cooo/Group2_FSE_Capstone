@@ -9,15 +9,18 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
+import org.springframework.web.util.ContentCachingResponseWrapper;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Optional;
 
 /**
- * Task: FSE-301
- * Assigned to: Carl
- * HTTP request interceptor enforcing transaction idempotency via Redis locks and caching.
+ * Task: FSE-301 / FSE-307
+ * HTTP request interceptor enforcing transaction idempotency via Redis locks,
+ * error cleanup on abort, and 24-hour response caching with X-Cache-Replay replay.
  */
 @Component
 @RequiredArgsConstructor
@@ -29,6 +32,7 @@ public class IdempotencyInterceptor implements HandlerInterceptor {
     public static final String IDEMPOTENCY_KEY_ATTR = "IDEMPOTENCY_KEY_ATTR";
 
     private static final Duration LOCK_TIMEOUT = Duration.ofSeconds(30);
+    private static final Duration CACHE_TTL = Duration.ofHours(24);
 
     private final IdempotencyService idempotencyService;
 
@@ -44,7 +48,7 @@ public class IdempotencyInterceptor implements HandlerInterceptor {
         String idempotencyKey = extractIdempotencyKey(request);
 
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
-            writeErrorResponse(response, HttpStatus.BAD_REQUEST, "MISSING_IDEMPOTENCY_KEY",
+            writeErrorResponse(request, response, HttpStatus.BAD_REQUEST, "MISSING_IDEMPOTENCY_KEY",
                     "Idempotency-Key header is required for transaction mutation requests.");
             return false;
         }
@@ -71,9 +75,52 @@ public class IdempotencyInterceptor implements HandlerInterceptor {
 
         // Key is still in-flight
         log.warn("Blocked duplicate in-flight transaction with key: {}", idempotencyKey);
-        writeErrorResponse(response, HttpStatus.CONFLICT, "CONCURRENT_TRANSACTION_IN_FLIGHT",
+        writeErrorResponse(request, response, HttpStatus.CONFLICT, "CONCURRENT_TRANSACTION_IN_FLIGHT",
                 "A transaction with this Idempotency-Key is currently being processed. Duplicate submission blocked.");
         return false;
+    }
+
+    @Override
+    public void afterCompletion(
+            HttpServletRequest request,
+            HttpServletResponse response,
+            Object handler,
+            Exception ex) throws Exception {
+
+        String idempotencyKey = (String) request.getAttribute(IDEMPOTENCY_KEY_ATTR);
+        if (idempotencyKey == null) {
+            return;
+        }
+
+        int status = response.getStatus();
+
+        // If the transaction aborted or errored (HTTP 4xx/5xx or unhandled exception), release lock for retry
+        if (ex != null || status >= 400) {
+            log.warn("Transaction failed (status={}, ex={}); releasing idempotency lock for key: {}",
+                    status, ex != null ? ex.getMessage() : "none", idempotencyKey);
+            idempotencyService.release(idempotencyKey);
+            return;
+        }
+
+        // If 2xx successful response, cache response body for 24 hours
+        if (status >= 200 && status < 300) {
+            ContentCachingResponseWrapper wrapper = null;
+            if (response instanceof ContentCachingResponseWrapper ccrw) {
+                wrapper = ccrw;
+            } else if (request.getAttribute(ContentCachingResponseWrapperFilter.CACHED_RESPONSE_WRAPPER_ATTR)
+                    instanceof ContentCachingResponseWrapper ccrw) {
+                wrapper = ccrw;
+            }
+
+            if (wrapper != null) {
+                byte[] contentBytes = wrapper.getContentAsByteArray();
+                if (contentBytes.length > 0) {
+                    String responseBody = new String(contentBytes, StandardCharsets.UTF_8);
+                    idempotencyService.complete(idempotencyKey, responseBody, CACHE_TTL);
+                    log.info("Successfully cached 2xx response for idempotency key {} (TTL=24h)", idempotencyKey);
+                }
+            }
+        }
     }
 
     private String extractIdempotencyKey(HttpServletRequest request) {
@@ -84,11 +131,31 @@ public class IdempotencyInterceptor implements HandlerInterceptor {
         return key != null ? key.trim() : null;
     }
 
-    private void writeErrorResponse(HttpServletResponse response, HttpStatus status, String errorCode, String message) throws IOException {
+    private void writeErrorResponse(
+            HttpServletRequest request,
+            HttpServletResponse response,
+            HttpStatus status,
+            String errorCode,
+            String message) throws IOException {
+
         response.setStatus(status.value());
-        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        String json = String.format("{\"error\":\"%s\",\"message\":\"%s\",\"status\":%d}",
-                errorCode, message, status.value());
+        response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
+        String json = String.format(
+                "{\"type\":\"https://api.corebank.local/errors/%s\","
+                        + "\"title\":\"%s\","
+                        + "\"status\":%d,"
+                        + "\"detail\":\"%s\","
+                        + "\"instance\":\"%s\","
+                        + "\"errorCode\":\"%s\","
+                        + "\"timestamp\":\"%s\"}",
+                errorCode,
+                status.getReasonPhrase(),
+                status.value(),
+                message,
+                request.getRequestURI(),
+                errorCode,
+                Instant.now().toString()
+        );
         response.getWriter().write(json);
         response.getWriter().flush();
     }
