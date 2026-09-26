@@ -84,6 +84,12 @@ public class TokenServiceImpl implements TokenService {
             throw new InvalidTokenException("Invalid or expired authorization token");
         }
 
+        String jti = jwtTokenProvider.getJti(jwt);
+        if (jti != null && tokenBlacklistService.isRevoked(jti)) {
+            log.warn("Attempt to use revoked JWT with jti={}", jti);
+            throw new InvalidTokenException("Token session has been revoked");
+        }
+
         String username = jwtTokenProvider.getUsername(jwt);
         String userType = jwtTokenProvider.getUserType(jwt);
         List<String> roles = jwtTokenProvider.getRoles(jwt);
