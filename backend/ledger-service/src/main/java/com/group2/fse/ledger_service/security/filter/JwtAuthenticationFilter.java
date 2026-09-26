@@ -38,11 +38,29 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         try {
             String jwt = resolveToken(request);
-            if (StringUtils.hasText(jwt) && jwtTokenProvider.validateToken(jwt)) {
-                Authentication authentication = jwtTokenProvider.getAuthentication(jwt);
-                SecurityContextHolder.getContext().setAuthentication(authentication);
-                log.debug("Authenticated user '{}' with roles {} for URI: {}",
-                        authentication.getName(), authentication.getAuthorities(), request.getRequestURI());
+            if (StringUtils.hasText(jwt)) {
+                if (jwtTokenProvider.validateToken(jwt)) {
+                    Authentication authentication = jwtTokenProvider.getAuthentication(jwt);
+                    SecurityContextHolder.getContext().setAuthentication(authentication);
+                    log.debug("Authenticated user '{}' with roles {} for URI: {}",
+                            authentication.getName(), authentication.getAuthorities(), request.getRequestURI());
+                } else {
+                    if (jwtTokenProvider.isTokenExpired(jwt)) {
+                        request.setAttribute(
+                                com.group2.fse.ledger_service.security.handler.CustomAuthenticationEntryPoint.ATTR_ERROR_CODE,
+                                "AUTH_TOKEN_EXPIRED");
+                        request.setAttribute(
+                                com.group2.fse.ledger_service.security.handler.CustomAuthenticationEntryPoint.ATTR_ERROR_DETAIL,
+                                "Your session has expired. Please log in again to continue.");
+                    } else {
+                        request.setAttribute(
+                                com.group2.fse.ledger_service.security.handler.CustomAuthenticationEntryPoint.ATTR_ERROR_CODE,
+                                "AUTH_INVALID_CREDENTIALS");
+                        request.setAttribute(
+                                com.group2.fse.ledger_service.security.handler.CustomAuthenticationEntryPoint.ATTR_ERROR_DETAIL,
+                                "Invalid or malformed authentication credentials.");
+                    }
+                }
             }
         } catch (Exception ex) {
             log.error("Could not set user authentication in security context: {}", ex.getMessage());
@@ -51,6 +69,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         filterChain.doFilter(request, response);
+
     }
 
     private String resolveToken(HttpServletRequest request) {

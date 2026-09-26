@@ -8,6 +8,8 @@ import com.group2.fse.ledger_service.security.handler.CustomAuthenticationEntryP
 import com.group2.fse.ledger_service.security.jwt.JwtTokenProvider;
 import com.group2.fse.ledger_service.security.jwt.UserPrincipal;
 import jakarta.servlet.FilterChain;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -50,8 +52,8 @@ class SecurityFilterIntegrationTest {
     @BeforeEach
     void setUp() {
         jwtFilter = new JwtAuthenticationFilter(jwtTokenProvider);
-        blacklistFilter = new TokenBlacklistFilter(tokenBlacklistService);
         entryPoint = new CustomAuthenticationEntryPoint(objectMapper);
+        blacklistFilter = new TokenBlacklistFilter(tokenBlacklistService, entryPoint);
         SecurityContextHolder.clearContext();
     }
 
@@ -125,7 +127,40 @@ class SecurityFilterIntegrationTest {
         // Downstream should NOT be called
         verify(filterChain, never()).doFilter(request, response);
         assertThat(response.getStatus()).isEqualTo(401);
-        assertThat(response.getContentAsString()).contains("revoked");
+        assertThat(response.getContentType()).isEqualTo(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
+        assertThat(response.getContentAsString())
+                .contains("\"status\":401")
+                .contains("\"title\":\"Token Revoked\"")
+                .contains("\"errorCode\":\"AUTH_TOKEN_REVOKED\"")
+                .contains("revoked");
+    }
+
+    @Test
+    @DisplayName("Should set AUTH_TOKEN_EXPIRED when expired token is processed by filter pipeline")
+    void shouldSetExpiredTokenAttributesInPipeline() throws Exception {
+        String tokenHeader = createBearerToken("jti-expired-300");
+        String rawToken = tokenHeader.substring(7);
+
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/ledger/transfers");
+        request.addHeader("Authorization", tokenHeader);
+        request.setRequestURI("/api/v1/ledger/transfers");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        when(jwtTokenProvider.validateToken(rawToken)).thenReturn(false);
+        when(jwtTokenProvider.isTokenExpired(rawToken)).thenReturn(true);
+
+        jwtFilter.doFilter(request, response, (req, res) -> {
+            entryPoint.commence((HttpServletRequest) req, (HttpServletResponse) res,
+                    new BadCredentialsException("The token has expired"));
+        });
+
+        assertThat(response.getStatus()).isEqualTo(401);
+        assertThat(response.getContentType()).isEqualTo(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
+        assertThat(response.getContentAsString())
+                .contains("\"status\":401")
+                .contains("\"title\":\"Token Expired\"")
+                .contains("\"errorCode\":\"AUTH_TOKEN_EXPIRED\"")
+                .contains("Your session has expired");
     }
 
     @Test
@@ -146,3 +181,4 @@ class SecurityFilterIntegrationTest {
                 .contains("\"instance\":\"/api/v1/ledger/debit\"");
     }
 }
+

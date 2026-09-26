@@ -52,6 +52,9 @@ class JwtTokenProviderTest {
         String expiredToken = jwtTokenProvider.generateToken("teller_jane", 1001L, List.of("ROLE_TELLER"), "jti-expired", -1000L);
 
         assertThat(jwtTokenProvider.validateToken(expiredToken)).isFalse();
+        assertThat(jwtTokenProvider.isTokenExpired(expiredToken)).isTrue();
+        assertThat(jwtTokenProvider.validateTokenDetailed(expiredToken))
+                .isEqualTo(JwtTokenProvider.JwtValidationStatus.EXPIRED);
     }
 
     @Test
@@ -61,6 +64,9 @@ class JwtTokenProviderTest {
         String tampered = token.substring(0, token.length() - 5) + "abcde";
 
         assertThat(jwtTokenProvider.validateToken(tampered)).isFalse();
+        assertThat(jwtTokenProvider.isTokenExpired(tampered)).isFalse();
+        assertThat(jwtTokenProvider.validateTokenDetailed(tampered))
+                .isEqualTo(JwtTokenProvider.JwtValidationStatus.INVALID);
     }
 
     @Test
@@ -69,5 +75,10 @@ class JwtTokenProviderTest {
         assertThat(jwtTokenProvider.validateToken("not-a-valid-token")).isFalse();
         assertThat(jwtTokenProvider.validateToken("")).isFalse();
         assertThat(jwtTokenProvider.validateToken(null)).isFalse();
+        assertThat(jwtTokenProvider.validateTokenDetailed("not-a-valid-token"))
+                .isEqualTo(JwtTokenProvider.JwtValidationStatus.INVALID);
+        assertThat(jwtTokenProvider.validateTokenDetailed(null))
+                .isEqualTo(JwtTokenProvider.JwtValidationStatus.INVALID);
     }
 }
+

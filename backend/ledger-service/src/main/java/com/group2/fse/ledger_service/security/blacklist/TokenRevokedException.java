@@ -1,15 +1,19 @@
 package com.group2.fse.ledger_service.security.blacklist;
 
+import org.springframework.security.core.AuthenticationException;
+
 /**
- * Thrown internally when a revoked token is presented. Currently caught and
- * translated to a 401 directly inside TokenBlacklistFilter, since
- * spring-boot-starter-security (Carl, FSE-401) isn't merged yet and there's
- * no AuthenticationEntryPoint to delegate to. Once FSE-401/FSE-405 land,
- * swap the catch block in the filter to let this propagate to Alyssa's
- * CustomAuthenticationEntryPoint instead.
+ * Thrown when a revoked token is presented.
+ * Handled centrally by CustomAuthenticationEntryPoint and GlobalExceptionHandler
+ * to produce standardized RFC-7807 problem details (FSE-405).
  */
-public class TokenRevokedException extends RuntimeException {
+public class TokenRevokedException extends AuthenticationException {
+
     public TokenRevokedException(String message) {
         super(message);
     }
-}
+
+    public TokenRevokedException(String message, Throwable cause) {
+        super(message, cause);
+    }
+}

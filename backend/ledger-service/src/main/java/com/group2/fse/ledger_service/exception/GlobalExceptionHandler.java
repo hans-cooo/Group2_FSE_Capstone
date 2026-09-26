@@ -7,6 +7,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
+import com.group2.fse.ledger_service.security.blacklist.TokenRevokedException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -161,6 +162,26 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity
                 .status(HttpStatus.CONFLICT)
+                .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+                .body(problem);
+    }
+
+    @ExceptionHandler(TokenRevokedException.class)
+    public ResponseEntity<Map<String, Object>> handleTokenRevoked(
+            TokenRevokedException ex, HttpServletRequest request) {
+        log.warn("Token revoked on {}: {}", request.getRequestURI(), ex.getMessage());
+
+        Map<String, Object> problem = createProblemDetails(
+                "https://api.corebank.local/errors/AUTH_TOKEN_REVOKED",
+                "Token Revoked",
+                HttpStatus.UNAUTHORIZED.value(),
+                ex.getMessage() != null ? ex.getMessage() : "This session was terminated upon logout. Please authenticate with new credentials.",
+                request.getRequestURI(),
+                "AUTH_TOKEN_REVOKED"
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.UNAUTHORIZED)
                 .contentType(MediaType.APPLICATION_PROBLEM_JSON)
                 .body(problem);
     }

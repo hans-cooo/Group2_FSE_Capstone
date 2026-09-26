@@ -95,7 +95,10 @@ CAPSTONE FSE.docx
 *.xlsx
 *.pptx
 generate_report*.py
+*PERSONAL_NOTES*.md
+*STUDY_GUIDE*.md
 docs/
 
 
 tasks/
+

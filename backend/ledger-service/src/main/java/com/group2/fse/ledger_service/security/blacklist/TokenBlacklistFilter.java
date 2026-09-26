@@ -6,7 +6,10 @@ import java.util.Base64;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
+
+import com.group2.fse.ledger_service.security.handler.CustomAuthenticationEntryPoint;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -15,19 +18,13 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Task: FSE-404
- * Assigned to: Gabriel
+ * Task: FSE-404 & FSE-405
+ * Assigned to: Gabriel & Alyssa
  *
- * Runs AFTER JwtAuthenticationFilter (Jared, FSE-402) per Section 4A of the
- * Epic D plan. By the time it executes, the token's signature has already
- * been verified upstream, so this filter reads the jti claim directly off
- * the (already-trusted) token payload -- it does NOT depend on Jared's
- * UserPrincipal shape, keeping this package independently buildable.
- *
- * TODO once FSE-401 (spring-boot-starter-security) and FSE-405 (Alyssa's
- * CustomAuthenticationEntryPoint) merge: replace writeRevokedResponse() with
- * throwing TokenRevokedException and let Spring Security's exception
- * translation handle the 401 response centrally.
+ * Runs AFTER JwtAuthenticationFilter per Section 4A of the Epic D plan.
+ * Verifies token revocation state in Redis.
+ * If revoked, delegates to Alyssa's CustomAuthenticationEntryPoint (FSE-405)
+ * throwing TokenRevokedException for standardized RFC-7807 error responses.
  */
 @Slf4j
 public class TokenBlacklistFilter extends OncePerRequestFilter {
@@ -35,15 +32,21 @@ public class TokenBlacklistFilter extends OncePerRequestFilter {
     private static final String AUTH_HEADER = "Authorization";
     private static final String BEARER_PREFIX = "Bearer ";
 
-    // Deliberately not using a JSON library here: Jackson isn't resolvable on
-    // this module's classpath, and pulling in a dependency just to read one
-    // claim off an already-signature-verified token is overkill.
+    // Deliberately not using a JSON library here: avoids extra parsing dependencies
+    // for reading one claim off an already-signature-verified token.
     private static final Pattern JTI_PATTERN = Pattern.compile("\"jti\"\\s*:\\s*\"([^\"]+)\"");
 
     private final TokenBlacklistService tokenBlacklistService;
+    private final CustomAuthenticationEntryPoint authenticationEntryPoint;
 
     public TokenBlacklistFilter(TokenBlacklistService tokenBlacklistService) {
+        this(tokenBlacklistService, null);
+    }
+
+    public TokenBlacklistFilter(TokenBlacklistService tokenBlacklistService,
+                                CustomAuthenticationEntryPoint authenticationEntryPoint) {
         this.tokenBlacklistService = tokenBlacklistService;
+        this.authenticationEntryPoint = authenticationEntryPoint;
     }
 
     @Override
@@ -60,7 +63,17 @@ public class TokenBlacklistFilter extends OncePerRequestFilter {
         String jti = extractJti(header.substring(BEARER_PREFIX.length()));
         if (jti != null && tokenBlacklistService.isRevoked(jti)) {
             log.warn("Rejected request with revoked token: jti={}, path={}", jti, request.getRequestURI());
-            writeRevokedResponse(response, request.getRequestURI());
+            SecurityContextHolder.clearContext();
+            request.setAttribute(CustomAuthenticationEntryPoint.ATTR_ERROR_CODE, "AUTH_TOKEN_REVOKED");
+            request.setAttribute(CustomAuthenticationEntryPoint.ATTR_ERROR_DETAIL,
+                    "The token has been revoked or logged out. Please authenticate with new credentials.");
+
+            if (authenticationEntryPoint != null) {
+                authenticationEntryPoint.commence(request, response,
+                        new TokenRevokedException("Token has been revoked/logged out"));
+            } else {
+                writeRevokedResponse(response, request.getRequestURI());
+            }
             return;
         }
 
@@ -85,10 +98,17 @@ public class TokenBlacklistFilter extends OncePerRequestFilter {
 
     private void writeRevokedResponse(HttpServletResponse response, String path) throws IOException {
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-        response.setContentType("application/json");
+        response.setContentType("application/problem+json");
         String body = String.format(
-            "{\"status\":401,\"error\":\"UNAUTHORIZED\",\"message\":\"Token has been revoked/logged out\",\"path\":\"%s\"}",
-            path);
+            "{\"type\":\"https://api.corebank.local/errors/AUTH_TOKEN_REVOKED\"," +
+            "\"title\":\"Token Revoked\"," +
+            "\"status\":401," +
+            "\"detail\":\"The token has been revoked or logged out. Please authenticate with new credentials.\"," +
+            "\"instance\":\"%s\"," +
+            "\"errorCode\":\"AUTH_TOKEN_REVOKED\"," +
+            "\"timestamp\":\"%s\"}",
+            path,
+            java.time.Instant.now().toString());
         response.getWriter().write(body);
     }
-}
+}

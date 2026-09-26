@@ -43,6 +43,46 @@ class SecurityExceptionHandlerTest {
     }
 
     @Test
+    @DisplayName("Should return RFC-7807 401 problem details on expired token")
+    void shouldReturn401ExpiredTokenProblemDetails() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setRequestURI("/api/v1/ledger/transfers");
+        request.setAttribute(CustomAuthenticationEntryPoint.ATTR_ERROR_CODE, "AUTH_TOKEN_EXPIRED");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        entryPoint.commence(request, response, new BadCredentialsException("The token has expired"));
+
+        assertThat(response.getStatus()).isEqualTo(401);
+        assertThat(response.getContentType()).isEqualTo(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
+        String body = response.getContentAsString();
+        assertThat(body).contains("\"status\":401")
+                .contains("\"title\":\"Token Expired\"")
+                .contains("\"errorCode\":\"AUTH_TOKEN_EXPIRED\"")
+                .contains("Your session has expired")
+                .contains("\"instance\":\"/api/v1/ledger/transfers\"");
+    }
+
+    @Test
+    @DisplayName("Should return RFC-7807 401 problem details on revoked token")
+    void shouldReturn401RevokedTokenProblemDetails() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setRequestURI("/api/v1/ledger/transfers");
+        request.setAttribute(CustomAuthenticationEntryPoint.ATTR_ERROR_CODE, "AUTH_TOKEN_REVOKED");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        entryPoint.commence(request, response, new BadCredentialsException("Token has been revoked/logged out"));
+
+        assertThat(response.getStatus()).isEqualTo(401);
+        assertThat(response.getContentType()).isEqualTo(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
+        String body = response.getContentAsString();
+        assertThat(body).contains("\"status\":401")
+                .contains("\"title\":\"Token Revoked\"")
+                .contains("\"errorCode\":\"AUTH_TOKEN_REVOKED\"")
+                .contains("revoked")
+                .contains("\"instance\":\"/api/v1/ledger/transfers\"");
+    }
+
+    @Test
     @DisplayName("Should return RFC-7807 403 problem details on access denied")
     void shouldReturn403ProblemDetails() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest();
@@ -60,3 +100,4 @@ class SecurityExceptionHandlerTest {
                 .contains("\"instance\":\"/api/v1/ledger/debit\"");
     }
 }
+

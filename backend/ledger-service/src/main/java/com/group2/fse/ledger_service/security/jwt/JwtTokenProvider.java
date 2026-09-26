@@ -85,27 +85,54 @@ public class JwtTokenProvider {
                 .getPayload();
     }
 
+    public enum JwtValidationStatus {
+        VALID,
+        EXPIRED,
+        INVALID
+    }
+
     /**
-     * Validate JWT token signature and expiration.
+     * Validate JWT token signature and expiration, returning detailed validation status.
      */
-    public boolean validateToken(String token) {
+    public JwtValidationStatus validateTokenDetailed(String token) {
+        if (token == null || token.isBlank()) {
+            return JwtValidationStatus.INVALID;
+        }
         try {
             Jwts.parser()
                     .verifyWith(key)
                     .build()
                     .parseSignedClaims(token);
-            return true;
-        } catch (SecurityException | MalformedJwtException e) {
-            log.warn("Invalid JWT signature or malformed token: {}", e.getMessage());
+            return JwtValidationStatus.VALID;
         } catch (ExpiredJwtException e) {
             log.warn("Expired JWT token: {}", e.getMessage());
+            return JwtValidationStatus.EXPIRED;
+        } catch (SecurityException | MalformedJwtException e) {
+            log.warn("Invalid JWT signature or malformed token: {}", e.getMessage());
+            return JwtValidationStatus.INVALID;
         } catch (UnsupportedJwtException e) {
             log.warn("Unsupported JWT token: {}", e.getMessage());
+            return JwtValidationStatus.INVALID;
         } catch (IllegalArgumentException e) {
             log.warn("JWT claims string is empty or invalid: {}", e.getMessage());
+            return JwtValidationStatus.INVALID;
         }
-        return false;
     }
+
+    /**
+     * Check specifically if the token has expired.
+     */
+    public boolean isTokenExpired(String token) {
+        return validateTokenDetailed(token) == JwtValidationStatus.EXPIRED;
+    }
+
+    /**
+     * Validate JWT token signature and expiration.
+     */
+    public boolean validateToken(String token) {
+        return validateTokenDetailed(token) == JwtValidationStatus.VALID;
+    }
+
 
     public String getUsername(String token) {
         return getClaims(token).getSubject();

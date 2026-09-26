@@ -81,4 +81,30 @@ class TokenBlacklistFilterTest {
         assertEquals(401, response.getStatus());
         assertEquals(true, response.getContentAsString().contains("revoked"));
     }
-}
+
+    @Test
+    void revokedToken_delegatesToCustomAuthenticationEntryPoint() throws Exception {
+        com.group2.fse.ledger_service.security.handler.CustomAuthenticationEntryPoint mockEntryPoint =
+                org.mockito.Mockito.mock(com.group2.fse.ledger_service.security.handler.CustomAuthenticationEntryPoint.class);
+        TokenBlacklistFilter filterWithEntryPoint = new TokenBlacklistFilter(tokenBlacklistService, mockEntryPoint);
+
+        String token = fakeToken("jti-revoked-2");
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("Authorization", "Bearer " + token);
+        request.setRequestURI("/api/v1/ledger/transfers");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        when(tokenBlacklistService.isRevoked("jti-revoked-2")).thenReturn(true);
+
+        filterWithEntryPoint.doFilter(request, response, filterChain);
+
+        verify(filterChain, never()).doFilter(request, response);
+        verify(mockEntryPoint, times(1)).commence(
+                org.mockito.ArgumentMatchers.eq(request),
+                org.mockito.ArgumentMatchers.eq(response),
+                org.mockito.ArgumentMatchers.any(TokenRevokedException.class)
+        );
+        assertEquals("AUTH_TOKEN_REVOKED", request.getAttribute(
+                com.group2.fse.ledger_service.security.handler.CustomAuthenticationEntryPoint.ATTR_ERROR_CODE));
+    }
+}

@@ -71,7 +71,7 @@ public class SecurityConfig {
 
                 // Register JWT authentication and token blacklist filters in canonical order
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
-                .addFilterAfter(new TokenBlacklistFilter(tokenBlacklistService), JwtAuthenticationFilter.class);
+                .addFilterAfter(new TokenBlacklistFilter(tokenBlacklistService, customAuthenticationEntryPoint), JwtAuthenticationFilter.class);
 
         return http.build();
     }
