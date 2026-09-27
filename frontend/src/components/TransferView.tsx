@@ -151,7 +151,7 @@ export const TransferView: React.FC<TransferViewProps> = ({
               >
                 {accounts.map(a => (
                   <option key={a.accountId} value={a.accountId}>
-                    {a.accountType} - {a.accountNumber} (₱{a.balance.toFixed(2)})
+                    {a.customerName ? `[${a.customerName}] ` : ''}{a.accountType} - {a.accountNumber} (₱{a.balance.toFixed(2)})
                   </option>
                 ))}
               </select>
@@ -163,7 +163,7 @@ export const TransferView: React.FC<TransferViewProps> = ({
                 <span>DESTINATION ACCOUNT (CREDIT LEG)</span>
                 {destAccount && (
                   <span style={{ color: 'var(--accent-cyan)', fontFamily: 'var(--font-mono)' }}>
-                    Bal: ₱{destAccount.balance.toFixed(2)}
+                    {destAccount.customerName ? `[${destAccount.customerName}] ` : ''}Bal: ₱{destAccount.balance.toFixed(2)}
                   </span>
                 )}
               </label>
@@ -174,7 +174,7 @@ export const TransferView: React.FC<TransferViewProps> = ({
               >
                 {accounts.map(a => (
                   <option key={a.accountId} value={a.accountId} disabled={a.accountId === sourceAccountId}>
-                    {a.accountType} - {a.accountNumber} (₱{a.balance.toFixed(2)})
+                    {a.customerName ? `[${a.customerName}] ` : ''}{a.accountType} - {a.accountNumber} (₱{a.balance.toFixed(2)})
                   </option>
                 ))}
               </select>

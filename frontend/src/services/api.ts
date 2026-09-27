@@ -293,6 +293,8 @@ class ApiClient {
             balance: acc.balance !== undefined ? Number(acc.balance) : Number(acc.availableBalance || 0),
             currency: acc.currency || 'PHP',
             status: acc.status || 'ACTIVE',
+            customerId: acc.customerId,
+            customerName: acc.customerName,
             createdAt: acc.createdAt
           }));
           this.localAccounts = accounts;

@@ -62,7 +62,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/customers/{customerId}").hasAnyRole("TELLER", "ADMIN")
                         
                         // Account endpoints
-                        .requestMatchers("/api/v1/accounts/my-accounts").hasRole("CUSTOMER")
+                        .requestMatchers("/api/v1/accounts/my-accounts").hasAnyRole("CUSTOMER", "TELLER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/accounts").hasAnyRole("TELLER", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/v1/accounts").hasAnyRole("TELLER", "ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/v1/accounts/closure-requests").hasAnyRole("TELLER", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/v1/accounts/closure-requests/*/approve").hasRole("ADMIN")

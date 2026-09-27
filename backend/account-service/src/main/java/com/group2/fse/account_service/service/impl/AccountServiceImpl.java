@@ -103,6 +103,17 @@ public class AccountServiceImpl implements AccountService {
 
     @Override
     @Transactional(readOnly = true)
+    public List<AccountResponse> getAllAccounts() {
+        return accountRepository.findAll().stream()
+                .map(acc -> {
+                    Balance balance = balanceRepository.findByAccount_AccountId(acc.getAccountId()).orElse(null);
+                    return mapToAccountResponse(acc, balance);
+                })
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public AccountResponse getAccountById(Long accountId, Long customerId, boolean isStaff) {
         Account account = accountRepository.findById(accountId)
                 .orElseThrow(() -> new AccountNotFoundException("Account not found with ID: " + accountId));

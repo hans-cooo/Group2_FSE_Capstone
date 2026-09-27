@@ -21,6 +21,8 @@ export interface Account {
   balance: number;
   currency: string;
   status: 'ACTIVE' | 'FROZEN' | 'DORMANT' | 'CLOSED';
+  customerId?: number;
+  customerName?: string;
   createdAt?: string;
 }
 

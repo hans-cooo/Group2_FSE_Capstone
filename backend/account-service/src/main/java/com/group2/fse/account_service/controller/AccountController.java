@@ -41,12 +41,26 @@ public class AccountController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
+    @GetMapping
+    @PreAuthorize("hasAnyRole('TELLER', 'ADMIN')")
+    public ResponseEntity<List<AccountResponse>> getAllAccounts() {
+        log.info("Staff requesting all active bank accounts");
+        List<AccountResponse> accounts = accountService.getAllAccounts();
+        return ResponseEntity.ok(accounts);
+    }
+
     @GetMapping("/my-accounts")
-    @PreAuthorize("hasRole('CUSTOMER')")
+    @PreAuthorize("hasAnyRole('CUSTOMER', 'TELLER', 'ADMIN')")
     public ResponseEntity<List<AccountResponse>> getMyAccounts(
             @AuthenticationPrincipal UserPrincipal principal) {
-        log.info("Fetching accounts for customer ID {}", principal.getUserId());
-        List<AccountResponse> accounts = accountService.getCustomerAccounts(principal.getUserId());
+        boolean isStaff = principal != null && principal.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_TELLER") || a.getAuthority().equals("ROLE_ADMIN"));
+        if (isStaff) {
+            log.info("Staff user {} fetching all bank accounts via /my-accounts", principal.getUsername());
+            return ResponseEntity.ok(accountService.getAllAccounts());
+        }
+        log.info("Fetching accounts for customer ID {}", principal != null ? principal.getUserId() : null);
+        List<AccountResponse> accounts = accountService.getCustomerAccounts(principal != null ? principal.getUserId() : 1L);
         return ResponseEntity.ok(accounts);
     }
 

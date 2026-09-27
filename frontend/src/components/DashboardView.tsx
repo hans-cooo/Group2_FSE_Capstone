@@ -168,6 +168,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <div style={{ fontSize: '16px', fontWeight: '700', fontFamily: 'var(--font-mono)', color: '#ffffff', letterSpacing: '0.05em' }}>
                   {account.accountNumber}
                 </div>
+                {account.customerName && (
+                  <div style={{ marginTop: '6px', fontSize: '12px', fontWeight: '600', color: 'var(--accent-cyan)' }}>
+                    Holder: {account.customerName}
+                  </div>
+                )}
               </div>
 
               <div>
