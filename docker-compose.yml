@@ -191,6 +191,40 @@ services:
     networks:
       - core-banking-net
 
+  # ============================================================================
+  # 8. NOTIFICATION SERVICE (Real-time Event Consumer & Customer In-App Feed)
+  # ============================================================================
+  notification-service:
+    build:
+      context: ./backend/notification-service
+      dockerfile: Dockerfile
+    container_name: notification-service
+    ports:
+      - "${NOTIFICATION_PORT:-8084}:8084"
+    depends_on:
+      kafka-broker:
+        condition: service_healthy
+      postgres-audit-db:
+        condition: service_healthy
+    environment:
+      SERVER_PORT: 8084
+      KAFKA_BOOTSTRAP_SERVERS: kafka-broker:29092
+      KAFKA_CONSUMER_GROUP: notification-service-group
+      DATABASE_URL: jdbc:postgresql://postgres-audit-db:5432/${POSTGRES_DB:-audit_store}
+      DATABASE_DRIVER: org.postgresql.Driver
+      DATABASE_USERNAME: ${POSTGRES_USER:-postgres}
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8084/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - core-banking-net
+
 # ==============================================================================
 # VOLUMES & NETWORKS
 # ==============================================================================
