@@ -44,11 +44,14 @@ jobs:
 
       - name: Verify core project directories & artifacts
         run: |
-          test -f backend/ledger-service/pom.xml || (echo "backend/ledger-service/pom.xml missing!" && exit 1)
-          test -f backend/ledger-service/mvnw || (echo "Maven wrapper missing!" && exit 1)
+          for svc in api-gateway auth-service account-service ledger-service notification-service; do
+            test -f "backend/$svc/pom.xml" || (echo "backend/$svc/pom.xml missing!" && exit 1)
+            test -f "backend/$svc/mvnw" || (echo "backend/$svc/mvnw missing!" && exit 1)
+            echo "  [FOUND] Microservice backend/$svc verified."
+          done
           test -f database/oracle/01_init_user.sql || (echo "Oracle init SQL missing!" && exit 1)
           test -f database/postgres/01_init_db.sql || (echo "Postgres init SQL missing!" && exit 1)
-          echo "Core file layout verified."
+          echo "All 5 core microservices and database definitions verified."
 
   # ============================================================================
   # JOB 2: PostgreSQL Immutable Audit Store & Cryptographic Triggers
@@ -359,7 +362,33 @@ jobs:
 
           echo "Oracle port ${PORT} is reachable from the GitHub runner."
 
-      - name: Compile and Run Full Backend Test Suite
+      - name: Test API Gateway Service (WebFlux / Routing / RFC-7807)
+        run: |
+          cd backend/api-gateway
+          chmod +x mvnw
+          ./mvnw clean test -B --no-transfer-progress
+
+      - name: Test Auth Service (Identity / Token / MFA)
+        run: |
+          set -a
+          # shellcheck disable=SC1091
+          source .env
+          set +a
+          cd backend/auth-service
+          chmod +x mvnw
+          ./mvnw clean test -B --no-transfer-progress
+
+      - name: Test Account Service (KYC / Accounts / Customer Lifecycle)
+        run: |
+          set -a
+          # shellcheck disable=SC1091
+          source .env
+          set +a
+          cd backend/account-service
+          chmod +x mvnw
+          ./mvnw clean test -B --no-transfer-progress
+
+      - name: Test Ledger Engine Service (Double-Entry / Mutex / Kafka)
         run: |
           set -a
           # shellcheck disable=SC1091
@@ -369,12 +398,22 @@ jobs:
           chmod +x mvnw
           ./mvnw clean test -B --no-transfer-progress
 
+      - name: Test Notification Service (Kafka Event Consumer / In-App Feed)
+        run: |
+          set -a
+          # shellcheck disable=SC1091
+          source .env
+          set +a
+          cd backend/notification-service
+          chmod +x mvnw
+          ./mvnw clean test -B --no-transfer-progress
+
       - name: Publish Surefire Test Reports on Failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: backend-surefire-test-reports
-          path: backend/ledger-service/target/surefire-reports/
+          path: backend/*/target/surefire-reports/
           retention-days: 7
 
   # ============================================================================
