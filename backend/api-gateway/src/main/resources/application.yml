@@ -1,0 +1,85 @@
+server:
+  port: ${SERVER_PORT:8080}
+
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOrigins:
+              - "http://localhost:3000"
+              - "http://localhost:5173"
+              - "http://127.0.0.1:3000"
+              - "http://127.0.0.1:5173"
+            allowedMethods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - PATCH
+              - OPTIONS
+            allowedHeaders: "*"
+            exposedHeaders:
+              - "X-Correlation-ID"
+              - "Authorization"
+              - "Idempotency-Key"
+              - "Content-Disposition"
+              - "Location"
+            allowCredentials: true
+            maxAge: 3600
+      routes:
+        # 1. Auth Service Routes (Identity, Registration, MFA, Token Refresh)
+        - id: auth-service-route
+          uri: ${AUTH_SERVICE_URL:http://localhost:8081}
+          predicates:
+            - Path=/api/v1/auth/**
+
+        # 2. Account Service Routes (Customers & Accounts Lifecycle)
+        - id: account-service-accounts-route
+          uri: ${ACCOUNT_SERVICE_URL:http://localhost:8082}
+          predicates:
+            - Path=/api/v1/accounts/**
+
+        - id: account-service-customers-route
+          uri: ${ACCOUNT_SERVICE_URL:http://localhost:8082}
+          predicates:
+            - Path=/api/v1/customers/**
+
+        # 3. Ledger Service Routes (Double-Entry Mutations, Transfers, Balances)
+        - id: ledger-service-route
+          uri: ${LEDGER_SERVICE_URL:http://localhost:8083}
+          predicates:
+            - Path=/api/v1/ledger/**
+
+        # 4. Notification Service Routes (In-App Notification Feed & SSE/WebSockets)
+        - id: notification-service-route
+          uri: ${NOTIFICATION_SERVICE_URL:http://localhost:8084}
+          predicates:
+            - Path=/api/v1/notifications/**
+
+        # 5. Audit Service Routes (Forensic Audit Logs & Merkle Proofs)
+        - id: audit-service-route
+          uri: ${AUDIT_SERVICE_URL:http://localhost:8085}
+          predicates:
+            - Path=/api/v1/audit/**
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,gateway,metrics
+  endpoint:
+    health:
+      show-details: always
+    gateway:
+      enabled: true
+
+logging:
+  level:
+    root: INFO
+    com.group2.fse.api_gateway: DEBUG
+    org.springframework.cloud.gateway: INFO
+    org.springframework.web.reactive: INFO

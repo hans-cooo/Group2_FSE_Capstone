@@ -50,6 +50,8 @@ desktop.ini
 logs/
 *.tmp
 *.temp
+__pycache__/
+*.pyc
 
 # ------------------------------------------------------------------------------
 # Java & Spring Boot Build Artifacts (Phases 2 - 4)
