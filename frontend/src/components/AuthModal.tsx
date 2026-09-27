@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, KeyRound, UserCheck, LogIn, CheckCircle2, AlertCircle } from 'lucide-react';
 import type { AuthSession } from '../types';
+import { apiClient } from '../services/api';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -19,7 +20,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [mfaCode, setMfaCode] = useState('');
-  const [mfaRequired, setMfaRequired] = useState(false);
+  const [mfaRequired, _setMfaRequired] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -29,52 +30,59 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const personas = [
     {
       id: 1,
-      username: 'customer1',
+      username: 'john_doe',
       role: 'ROLE_CUSTOMER',
-      userType: 'CUSTOMER',
-      description: 'Standard retail banking client with checking & savings vaults',
+      userType: 'CUSTOMER' as const,
+      description: 'Primary customer (Account #1 - Savings: ₱49,675.00 in Oracle DB)',
       color: 'var(--accent-cyan)'
     },
     {
       id: 2,
-      username: 'customer2',
+      username: 'maria_santos',
       role: 'ROLE_CUSTOMER',
-      userType: 'CUSTOMER',
-      description: 'Inter-account transfer recipient and business merchant profile',
+      userType: 'CUSTOMER' as const,
+      description: 'Counterparty recipient (Account #2 - Checking: ₱25,325.00 in Oracle DB)',
       color: 'var(--color-success)'
     },
     {
       id: 3,
       username: 'teller_alice',
       role: 'ROLE_TELLER',
-      userType: 'TELLER',
-      description: 'Authorized branch teller with KYC verification & override capabilities',
+      userType: 'TELLER' as const,
+      description: 'Authorized branch teller with KYC verification & teller privileges',
       color: 'var(--accent-indigo)'
     },
     {
       id: 4,
-      username: 'admin_bob',
+      username: 'admin',
       role: 'ROLE_ADMIN',
-      userType: 'ADMIN',
+      userType: 'ADMIN' as const,
       description: 'System administrator with full gateway actuator & audit inspection access',
       color: 'var(--color-warning)'
     }
   ];
 
-  const handleSelectPersona = (p: typeof personas[0]) => {
-    const newSession: AuthSession = {
-      accessToken: `coobs-token-${p.username}-${Date.now()}`,
-      userId: p.id,
-      username: p.username,
-      roles: [p.role],
-      userType: p.userType
-    };
-    onSessionChange(newSession);
-    setSuccessMsg(`Switched active context to ${p.username} (${p.userType})`);
-    setTimeout(() => {
-      setSuccessMsg(null);
-      onClose();
-    }, 900);
+  const handleSelectPersona = async (p: typeof personas[0]) => {
+    setIsLoading(true);
+    setErrorMsg(null);
+    try {
+      let session: AuthSession;
+      if (p.userType === 'CUSTOMER') {
+        session = await apiClient.loginCustomer(p.username, 'Password123!');
+      } else {
+        session = await apiClient.loginStaff(p.username, 'Password123!');
+      }
+      onSessionChange(session);
+      setSuccessMsg(`Live authentication successful for ${p.username} (${p.userType})`);
+      setTimeout(() => {
+        setSuccessMsg(null);
+        onClose();
+      }, 700);
+    } catch (err: any) {
+      setErrorMsg(`Authentication failed: ${err.message}`);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleLiveLogin = async (e: React.FormEvent) => {
@@ -83,47 +91,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setErrorMsg(null);
 
     try {
-      const res = await fetch('/api/v1/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        if (data.mfaRequired) {
-          setMfaRequired(true);
-          setSuccessMsg('MFA challenge triggered. Please enter one-time passcode.');
-        } else {
-          const session: AuthSession = {
-            accessToken: data.accessToken || data.token || 'gateway-jwt-token',
-            userId: data.userId || 1,
-            username: data.username || username,
-            roles: data.roles || ['ROLE_CUSTOMER'],
-            userType: data.roles?.includes('ROLE_ADMIN') ? 'ADMIN' : (data.roles?.includes('ROLE_TELLER') ? 'TELLER' : 'CUSTOMER')
-          };
-          onSessionChange(session);
-          setSuccessMsg('Authentication successful! Welcome to CooBS Core Banking.');
-          setTimeout(() => {
-            onClose();
-          }, 1000);
-        }
+      let session: AuthSession;
+      const isStaff = username === 'admin' || username.startsWith('teller');
+      if (isStaff) {
+        session = await apiClient.loginStaff(username, password);
       } else {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.message || err.detail || `Login rejected: HTTP ${res.status}`);
+        session = await apiClient.loginCustomer(username, password);
       }
+      onSessionChange(session);
+      setSuccessMsg(`Authenticated as ${username} via Core Auth Service`);
+      setTimeout(() => {
+        onClose();
+      }, 800);
     } catch (err: any) {
-      // Standalone simulation fallback if gateway or auth-service is offline
-      const simulatedSession: AuthSession = {
-        accessToken: `simulated-bearer-token-${username}`,
-        userId: 99,
-        username: username,
-        roles: username.includes('admin') ? ['ROLE_ADMIN'] : ['ROLE_CUSTOMER'],
-        userType: username.includes('admin') ? 'ADMIN' : 'CUSTOMER'
-      };
-      onSessionChange(simulatedSession);
-      setSuccessMsg(`Authenticated as ${username} (Autonomous Fallback Mode)`);
-      setTimeout(() => onClose(), 900);
+      setErrorMsg(err.message || 'Login failed. Please check credentials.');
     } finally {
       setIsLoading(false);
     }

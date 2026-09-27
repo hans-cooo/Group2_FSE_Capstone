@@ -12,12 +12,22 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
       },
+      '/actuator': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+        secure: false,
+      },
     },
   },
   preview: {
     port: 3000,
     proxy: {
       '/api': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+        secure: false,
+      },
+      '/actuator': {
         target: 'http://localhost:8080',
         changeOrigin: true,
         secure: false,

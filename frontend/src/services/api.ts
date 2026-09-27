@@ -169,17 +169,83 @@ class ApiClient {
   }
 
   // --------------------------------------------------------------------------
+  // Live Authentication Methods
+  // --------------------------------------------------------------------------
+  public async loginCustomer(username: string, password = 'Password123!'): Promise<AuthSession> {
+    const res = await fetch('/api/v1/auth/customers/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || err.message || `Customer login failed: HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    const authData = data.authData;
+    const session: AuthSession = {
+      accessToken: authData.accessToken,
+      userId: authData.userId,
+      username: authData.username,
+      roles: authData.roles || ['ROLE_CUSTOMER'],
+      userType: 'CUSTOMER'
+    };
+    this.setSession(session);
+    return session;
+  }
+
+  public async loginStaff(username: string, password = 'Password123!'): Promise<AuthSession> {
+    const res = await fetch('/api/v1/auth/staff/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || err.message || `Staff login failed: HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    const authData = data.authData;
+    const session: AuthSession = {
+      accessToken: authData.accessToken,
+      userId: authData.userId,
+      username: authData.username,
+      roles: authData.roles || ['ROLE_ADMIN'],
+      userType: authData.roles?.includes('ROLE_ADMIN') ? 'ADMIN' : 'TELLER'
+    };
+    this.setSession(session);
+    return session;
+  }
+
+  public async ensureLiveSession(): Promise<AuthSession> {
+    if (
+      this.session &&
+      this.session.accessToken &&
+      !this.session.accessToken.startsWith('demo-') &&
+      !this.session.accessToken.startsWith('simulated-') &&
+      !this.session.accessToken.startsWith('coobs-token-')
+    ) {
+      return this.session;
+    }
+    try {
+      return await this.loginCustomer('john_doe', 'Password123!');
+    } catch {
+      return this.session!;
+    }
+  }
+
+  // --------------------------------------------------------------------------
   // Health & Gateway Route Discovery
   // --------------------------------------------------------------------------
   public async checkGatewayHealth(): Promise<{ status: string; latencyMs: number; routes: GatewayRoute[] }> {
     const start = performance.now();
     try {
-      const res = await fetch('/api/v1/actuator/health', { method: 'GET' });
+      const res = await fetch('/actuator/health', { method: 'GET' });
       const latencyMs = Math.round(performance.now() - start);
       if (res.ok) {
         let routes: GatewayRoute[] = [];
         try {
-          const routesRes = await fetch('/api/v1/actuator/gateway/routes');
+          const routesRes = await fetch('/actuator/gateway/routes');
           if (routesRes.ok) {
             routes = await routesRes.json();
           }
@@ -210,6 +276,7 @@ class ApiClient {
   // --------------------------------------------------------------------------
   public async getAccounts(): Promise<Account[]> {
     try {
+      await this.ensureLiveSession();
       const res = await fetch('/api/v1/accounts/my-accounts', {
         headers: {
           'Authorization': `Bearer ${this.session?.accessToken || ''}`,
@@ -219,8 +286,17 @@ class ApiClient {
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data) && data.length > 0) {
-          this.localAccounts = data;
-          return data;
+          const accounts: Account[] = data.map((acc: any) => ({
+            accountId: acc.accountId,
+            accountNumber: acc.accountNumber,
+            accountType: acc.accountType || 'SAVINGS',
+            balance: acc.balance !== undefined ? Number(acc.balance) : Number(acc.availableBalance || 0),
+            currency: acc.currency || 'PHP',
+            status: acc.status || 'ACTIVE',
+            createdAt: acc.createdAt
+          }));
+          this.localAccounts = accounts;
+          return accounts;
         }
       }
     } catch {
@@ -241,6 +317,7 @@ class ApiClient {
 
     // Live Gateway Call
     try {
+      await this.ensureLiveSession();
       const res = await fetch('/api/v1/ledger/transfers', {
         method: 'POST',
         headers: {
@@ -256,18 +333,18 @@ class ApiClient {
 
       if (res.ok) {
         const data = await res.json();
-        const txnId = data.transactionId || data.transferId || data.id;
+        const txnId = data.transferReference || data.transactionId || data.transferId || data.id;
         const result: TransferResponse = {
           transactionId: txnId,
-          referenceNo: payload.referenceNo,
+          referenceNo: data.transferReference || payload.referenceNo,
           sourceAccountId: payload.sourceAccountId,
           destinationAccountId: payload.destinationAccountId,
           amount: payload.amount,
           status: 'COMPLETED',
-          timestamp: new Date().toISOString(),
+          timestamp: data.timestamp || new Date().toISOString(),
           isCachedReplay: res.headers.get('X-Cache') === 'HIT'
         };
-        // Update local accounts if active
+        // Update local accounts directly from database
         await this.getAccounts();
         return { response: result, isCachedReplay: !!result.isCachedReplay, latencyMs };
       } else {
@@ -275,6 +352,10 @@ class ApiClient {
         throw new Error(errorJson.detail || `Gateway returned HTTP ${res.status}`);
       }
     } catch (err: any) {
+      if (err.message && !err.message.includes('Failed to fetch') && !err.message.includes('NetworkError')) {
+        // If it was a real business error from backend (e.g. Insufficient funds), rethrow it
+        throw err;
+      }
       // If server is not running, provide local demonstration behavior including strict idempotency mutex
       const latencyMs = Math.round(performance.now() - start);
 
@@ -331,6 +412,7 @@ class ApiClient {
   // --------------------------------------------------------------------------
   public async getNotifications(): Promise<NotificationItem[]> {
     try {
+      await this.ensureLiveSession();
       const res = await fetch('/api/v1/notifications/my-notifications', {
         headers: {
           'Authorization': `Bearer ${this.session?.accessToken || ''}`,
@@ -353,6 +435,7 @@ class ApiClient {
 
   public async markNotificationAsRead(id: number): Promise<void> {
     try {
+      await this.ensureLiveSession();
       await fetch(`/api/v1/notifications/${id}/read`, {
         method: 'PATCH',
         headers: {
@@ -378,6 +461,7 @@ class ApiClient {
   // --------------------------------------------------------------------------
   public async getAccountAuditStatements(accountId: number): Promise<AuditRecord[]> {
     try {
+      await this.ensureLiveSession();
       const res = await fetch(`/api/v1/audit/accounts/${accountId}/statement?page=0&size=50&sort=eventTimestamp,desc`, {
         headers: {
           'Authorization': `Bearer ${this.session?.accessToken || ''}`,
@@ -399,6 +483,7 @@ class ApiClient {
 
   public async verifyAuditChain(accountId: number): Promise<ChainVerificationResult> {
     try {
+      await this.ensureLiveSession();
       const res = await fetch(`/api/v1/audit/verify-chain/${accountId}`, {
         headers: {
           'Authorization': `Bearer ${this.session?.accessToken || ''}`,
