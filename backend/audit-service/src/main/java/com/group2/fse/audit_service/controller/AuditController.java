@@ -54,14 +54,14 @@ public class AuditController {
     }
 
     @GetMapping("/transactions/{transactionId}")
-    @PreAuthorize("hasAnyRole('TELLER', 'ADMIN')")
+    @PreAuthorize("hasAnyRole('CUSTOMER', 'TELLER', 'ADMIN')")
     public ResponseEntity<ForensicAuditResponseDto> getTransactionForensics(@PathVariable Long transactionId) {
         ForensicAuditResponseDto forensics = auditQueryService.getTransactionForensics(transactionId);
         return ResponseEntity.ok(forensics);
     }
 
     @GetMapping("/verify-chain/{accountId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'AUDITOR')")
+    @PreAuthorize("hasAnyRole('CUSTOMER', 'TELLER', 'ADMIN', 'AUDITOR')")
     public ResponseEntity<ChainVerificationResponseDto> verifyChainIntegrity(@PathVariable Long accountId) {
         ChainVerificationResponseDto verification = auditQueryService.verifyChainIntegrity(accountId);
         return ResponseEntity.ok(verification);

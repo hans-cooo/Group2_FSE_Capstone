@@ -11,7 +11,7 @@ WORKDIR /workspace
 
 COPY .mvn/ .mvn/
 COPY mvnw pom.xml ./
-RUN chmod +x ./mvnw
+RUN sed -i 's/\r$//' ./mvnw && chmod +x ./mvnw
 
 RUN ./mvnw dependency:go-offline -B
 
@@ -19,7 +19,7 @@ COPY src ./src
 RUN ./mvnw clean package -DskipTests -B
 
 WORKDIR /workspace/target
-RUN java -Djarmode=layertools -jar notification-service-0.0.1-SNAPSHOT.jar extract
+RUN java -Djarmode=tools -jar notification-service-0.0.1-SNAPSHOT.jar extract --layers --launcher --destination extracted
 
 # ------------------------------------------------------------------------------
 # Stage 2: Minimal Distroless Production Runtime
@@ -29,10 +29,10 @@ WORKDIR /app
 
 RUN addgroup -S banking && adduser -S notification -G banking
 
-COPY --from=builder /workspace/target/dependencies/ ./
-COPY --from=builder /workspace/target/spring-boot-loader/ ./
-COPY --from=builder /workspace/target/snapshot-dependencies/ ./
-COPY --from=builder /workspace/target/application/ ./
+COPY --from=builder /workspace/target/extracted/dependencies/ ./
+COPY --from=builder /workspace/target/extracted/spring-boot-loader/ ./
+COPY --from=builder /workspace/target/extracted/snapshot-dependencies/ ./
+COPY --from=builder /workspace/target/extracted/application/ ./
 
 RUN chown -R notification:banking /app
 USER notification:banking

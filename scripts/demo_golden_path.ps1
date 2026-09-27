@@ -36,7 +36,7 @@ function Write-FailMessage([string]$Message) {
 $GwUrl = $GatewayUrl.TrimEnd("/")
 Write-Banner "CORE RETAIL BANKING - END-TO-END GOLDEN PATH DEMONSTRATION"
 Write-Host "Target Gateway: $GwUrl"
-Write-Host "Timestamp:      $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC' -AsUTC)"
+Write-Host "Timestamp:      $((Get-Date).ToUniversalTime().ToString('yyyy-MM-dd HH:mm:ss UTC'))"
 
 $Summary = [System.Collections.Generic.List[PSCustomObject]]::new()
 
@@ -332,11 +332,12 @@ $AuditVerified = $false
 
 # 7A. Attempt verification via API Gateway REST endpoint (/api/v1/audit/verify-chain)
 try {
+    $targetAccountId = if ($srcAcc) { $srcAcc } else { 1 }
     $AuditHeaders = @{
-        "Authorization" = "Bearer $AdminToken"
+        "Authorization" = "Bearer $token"
         "Accept"        = "application/json"
     }
-    $AuditUrl = "$GatewayUrl/api/v1/audit/verify-chain/$AccountId"
+    $AuditUrl = "$GatewayUrl/api/v1/audit/verify-chain/$targetAccountId"
     $AuditResponse = Invoke-RestMethod -Uri $AuditUrl -Method Get -Headers $AuditHeaders -TimeoutSec 5 -ErrorAction Stop
     if ($AuditResponse) {
         Write-PassMessage "Audit Service REST Chain Verification Confirmed (via API Gateway):"

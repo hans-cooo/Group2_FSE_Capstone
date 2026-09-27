@@ -47,9 +47,11 @@ public class LedgerTransferController {
 
     private Long extractActorId(Authentication authentication) {
         if (authentication != null && authentication.getPrincipal() instanceof UserPrincipal principal) {
-            return principal.getUserId();
+            boolean isStaff = principal.getAuthorities().stream()
+                    .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()) || "ROLE_TELLER".equals(a.getAuthority()));
+            return isStaff ? principal.getUserId() : null;
         }
-        return 1L;
+        return null;
     }
 
     private String extractClientIp(HttpServletRequest request) {

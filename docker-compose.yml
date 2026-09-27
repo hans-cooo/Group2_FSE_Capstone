@@ -1,3 +1,5 @@
+name: capstone
+
 services:
   # ============================================================================
   # 1. ORACLE DATABASE (Master System of Record & Pessimistic Row Locking)
@@ -7,7 +9,7 @@ services:
     container_name: oracle-core-db
     ports:
       - "${ORACLE_PORT:-1522}:1521"
-      - "${ORACLE_OEM_PORT:-5500}:5500"
+      - "${ORACLE_OEM_PORT:-5501}:5500"
     environment:
       ORACLE_PASSWORD: ${ORACLE_PASSWORD:?ORACLE_PASSWORD is required}
       APP_USER: ${APP_USER:-core_user}

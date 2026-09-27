@@ -13,7 +13,7 @@ WORKDIR /workspace
 # Copy maven wrapper and project definition first for efficient caching
 COPY .mvn/ .mvn/
 COPY mvnw pom.xml ./
-RUN chmod +x ./mvnw
+RUN sed -i 's/\r$//' ./mvnw && chmod +x ./mvnw
 
 # Resolve dependencies offline
 RUN ./mvnw dependency:go-offline -B
@@ -24,7 +24,7 @@ RUN ./mvnw clean package -DskipTests -B
 
 # Extract Spring Boot layered jar for optimal Docker layer caching
 WORKDIR /workspace/target
-RUN java -Djarmode=layertools -jar audit-service-0.0.1-SNAPSHOT.jar extract
+RUN java -Djarmode=tools -jar audit-service-0.0.1-SNAPSHOT.jar extract --layers --launcher --destination extracted
 
 # ------------------------------------------------------------------------------
 # Stage 2: Minimal Distroless Production Runtime
@@ -36,10 +36,10 @@ WORKDIR /app
 RUN addgroup -S banking && adduser -S audit -G banking
 
 # Copy layered jar directories in order of change frequency
-COPY --from=builder /workspace/target/dependencies/ ./
-COPY --from=builder /workspace/target/spring-boot-loader/ ./
-COPY --from=builder /workspace/target/snapshot-dependencies/ ./
-COPY --from=builder /workspace/target/application/ ./
+COPY --from=builder /workspace/target/extracted/dependencies/ ./
+COPY --from=builder /workspace/target/extracted/spring-boot-loader/ ./
+COPY --from=builder /workspace/target/extracted/snapshot-dependencies/ ./
+COPY --from=builder /workspace/target/extracted/application/ ./
 
 # Change ownership to non-root user
 RUN chown -R audit:banking /app
