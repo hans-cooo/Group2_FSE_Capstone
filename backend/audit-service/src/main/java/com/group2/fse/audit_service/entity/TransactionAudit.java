@@ -35,6 +35,9 @@ public class TransactionAudit {
     @Column(name = "account_id", nullable = false)
     private Long accountId;
 
+    @Column(name = "reference_no")
+    private String referenceNo;
+
     @Column(name = "transaction_type", nullable = false)
     private String transactionType;
 

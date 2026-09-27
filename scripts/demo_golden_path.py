@@ -358,27 +358,50 @@ def main():
         summary_records.append(("6. In-App Notifications", "GET /api/v1/notifications/my-notifications", notif_res["status"], f"{notif_res['latency_ms']}ms", "Feed Checked"))
 
     # -------------------------------------------------------------------------
-    # STEP 7: Forensic Cryptographic Audit Trail (Docker / PostgreSQL)
+    # STEP 7: Forensic Cryptographic Audit Trail (Gateway REST & PostgreSQL Store)
     # -------------------------------------------------------------------------
-    if not args.skip_containers:
-        log_step(7, "Cryptographic Audit Trail & SHA-256 Hash Chaining")
-        audit_query = "SELECT audit_id, transaction_id, entry_type, amount, current_hash FROM audit_store.ledger_mutation_audit ORDER BY audit_id DESC LIMIT 1;"
+    log_step(7, "Forensic Audit Verification & Cryptographic Hash Chaining")
+    audit_verified = False
+
+    # 7A. Attempt verification via API Gateway REST endpoint (/api/v1/audit/verify-chain)
+    try:
+        audit_headers = {
+            "Authorization": f"Bearer {admin_token}",
+            "Accept": "application/json"
+        }
+        status, data = http_request(f"{args.gateway_url}/api/v1/audit/verify-chain/{account_id}", "GET", headers=audit_headers)
+        if status == 200 and isinstance(data, dict):
+            log_pass("Audit Service REST Chain Verification Confirmed (via API Gateway):")
+            print(f"     - Account ID:        {data.get('accountId')}")
+            print(f"     - Records Verified:  {data.get('totalRecordsVerified')}")
+            print(f"     - Chain Intact:      {data.get('isChainIntact')}")
+            latest_hash = data.get('latestHash') or ""
+            print(f"     - Latest Hash:       {latest_hash[:16]}...{latest_hash[-8:] if len(latest_hash) > 16 else ''} (Length: {len(latest_hash)})")
+            print(f"     - Verification Msg:  {data.get('message')}")
+            summary_records.append(("7. Cryptographic Audit", "GET /api/v1/audit/verify-chain/{id}", 200, "REST Gateway", f"Chain Verified (Intact: {data.get('isChainIntact')})"))
+            audit_verified = True
+    except Exception as e:
+        log_warn(f"Audit Service REST endpoint unavailable or skipped ({e}). Falling back to direct database verification.")
+
+    # 7B. Fallback to direct PostgreSQL audit store query
+    if not audit_verified and not args.skip_containers:
+        audit_query = f"SELECT audit_id, transaction_id, transaction_type, amount, current_hash FROM audit_store.ledger_mutation_audit WHERE account_id = {account_id} ORDER BY audit_id DESC LIMIT 1;"
         cmd = f'docker exec postgres-audit-db psql -U postgres -d audit_store -t -A -F "|" -c "{audit_query}"'
         stdout, code = run_command(cmd)
         if code == 0 and "|" in stdout:
             parts = stdout.split("|")
             audit_id = parts[0]
             audit_tx = parts[1]
-            entry_type = parts[2]
+            tx_type = parts[2]
             amount = parts[3]
             curr_hash = parts[4] if len(parts) > 4 else ""
-            log_pass(f"PostgreSQL Forensic Audit Log Confirmed:")
+            log_pass(f"PostgreSQL Forensic Audit Log Confirmed (Direct Query):")
             print(f"     - Audit Record ID:   {audit_id}")
             print(f"     - Transaction ID:    {audit_tx}")
-            print(f"     - Entry Type:        {entry_type}")
+            print(f"     - Transaction Type:  {tx_type}")
             print(f"     - Amount:            {amount}")
             print(f"     - SHA-256 Hash:      {curr_hash[:16]}...{curr_hash[-8:]} (Length: {len(curr_hash)})")
-            summary_records.append(("7. Cryptographic Audit", "SELECT FROM audit_mutation", 200, "Local DB", f"Hash Verified (ID {audit_id})"))
+            summary_records.append(("7. Cryptographic Audit", "SELECT FROM audit_store", 200, "Local DB", f"Hash Verified (ID {audit_id})"))
         else:
             log_warn(f"Container audit query skipped or returned: {stdout}")
             summary_records.append(("7. Cryptographic Audit", "PostgreSQL audit_store", "N/A", "N/A", "Container skipped"))

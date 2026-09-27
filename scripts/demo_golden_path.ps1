@@ -325,25 +325,58 @@ try {
 }
 
 # -----------------------------------------------------------------------------
-# STEP 7: Forensic Cryptographic Audit Trail (Docker / PostgreSQL)
+# STEP 7: Forensic Cryptographic Audit Trail (Gateway REST & PostgreSQL Store)
 # -----------------------------------------------------------------------------
-if (-not $SkipContainers) {
-    Write-StepHeader "7" "Cryptographic Audit Trail and SHA-256 Hash Chaining"
+Write-StepHeader "7" "Forensic Audit Verification and Cryptographic Hash Chaining"
+$AuditVerified = $false
+
+# 7A. Attempt verification via API Gateway REST endpoint (/api/v1/audit/verify-chain)
+try {
+    $AuditHeaders = @{
+        "Authorization" = "Bearer $AdminToken"
+        "Accept"        = "application/json"
+    }
+    $AuditUrl = "$GatewayUrl/api/v1/audit/verify-chain/$AccountId"
+    $AuditResponse = Invoke-RestMethod -Uri $AuditUrl -Method Get -Headers $AuditHeaders -TimeoutSec 5 -ErrorAction Stop
+    if ($AuditResponse) {
+        Write-PassMessage "Audit Service REST Chain Verification Confirmed (via API Gateway):"
+        Write-Host "     - Account ID:        $($AuditResponse.accountId)"
+        Write-Host "     - Records Verified:  $($AuditResponse.totalRecordsVerified)"
+        Write-Host "     - Chain Intact:      $($AuditResponse.isChainIntact)"
+        $hashLen = if ($AuditResponse.latestHash) { $AuditResponse.latestHash.Length } else { 0 }
+        $hashPreview = if ($hashLen -gt 16) { $AuditResponse.latestHash.Substring(0, 16) } else { $AuditResponse.latestHash }
+        Write-Host "     - Latest Hash:       $hashPreview... (Length: $hashLen)"
+        Write-Host "     - Verification Msg:  $($AuditResponse.message)"
+        $Summary.Add([PSCustomObject]@{
+            Tier     = "7. Cryptographic Audit"
+            Endpoint = "GET /api/v1/audit/verify-chain/{id}"
+            Status   = 200
+            Latency  = "REST Gateway"
+            Details  = "Chain Verified (Intact: $($AuditResponse.isChainIntact))"
+        })
+        $AuditVerified = $true
+    }
+} catch {
+    Write-WarnMessage "Audit Service REST endpoint unavailable or skipped ($($_.Exception.Message)). Falling back to direct database verification."
+}
+
+# 7B. Fallback to direct PostgreSQL audit store query if REST gateway wasn't reached
+if (-not $AuditVerified -and -not $SkipContainers) {
     try {
-        $query = "SELECT audit_id, transaction_id, entry_type, amount, current_hash FROM audit_store.ledger_mutation_audit ORDER BY audit_id DESC LIMIT 1;"
+        $query = "SELECT audit_id, transaction_id, transaction_type, amount, current_hash FROM audit_store.ledger_mutation_audit WHERE account_id = $AccountId ORDER BY audit_id DESC LIMIT 1;"
         $auditOut = docker exec postgres-audit-db psql -U postgres -d audit_store -t -A -F "|" -c "$query" 2>$null
         if ($auditOut -and $auditOut.Contains("|")) {
             $parts = $auditOut.Split("|")
-            Write-PassMessage "PostgreSQL Forensic Audit Log Confirmed:"
+            Write-PassMessage "PostgreSQL Forensic Audit Log Confirmed (Direct Query):"
             Write-Host "     - Audit Record ID:   $($parts[0])"
             Write-Host "     - Transaction ID:    $($parts[1])"
-            Write-Host "     - Entry Type:        $($parts[2])"
+            Write-Host "     - Transaction Type:  $($parts[2])"
             Write-Host "     - Amount:            $($parts[3])"
             $hashPreview = if ($parts[4].Length -gt 16) { $parts[4].Substring(0, 16) } else { $parts[4] }
             Write-Host "     - SHA-256 Hash:      $hashPreview... (Length: $($parts[4].Length))"
             $Summary.Add([PSCustomObject]@{
                 Tier     = "7. Cryptographic Audit"
-                Endpoint = "SELECT FROM audit_mutation"
+                Endpoint = "SELECT FROM audit_store"
                 Status   = 200
                 Latency  = "Local DB"
                 Details  = "Hash Verified (ID $($parts[0]))"

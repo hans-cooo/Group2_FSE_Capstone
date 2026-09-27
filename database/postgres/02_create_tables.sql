@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS audit_store.ledger_mutation_audit (
     audit_id BIGSERIAL PRIMARY KEY,
     transaction_id BIGINT NOT NULL,
     account_id BIGINT NOT NULL,
+    reference_no VARCHAR(36),
     transaction_type VARCHAR(30) NOT NULL,
     amount NUMERIC(18, 4) NOT NULL,
     old_balance NUMERIC(18, 4) NOT NULL,

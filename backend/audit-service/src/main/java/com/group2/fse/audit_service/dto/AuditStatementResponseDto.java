@@ -16,6 +16,7 @@ public class AuditStatementResponseDto {
     private Long auditId;
     private Long transactionId;
     private Long accountId;
+    private String referenceNo;
     private String transactionType;
     private BigDecimal amount;
     private BigDecimal oldBalance;
