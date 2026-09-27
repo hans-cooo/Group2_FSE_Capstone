@@ -313,11 +313,7 @@ services:
       - core-banking-net
 
   # ============================================================================
-<<<<<<< HEAD
-  # 11. AUDIT SERVICE (Cryptographic Ledger Verification & Forensic Query Engine)
-=======
   # 11. AUDIT SERVICE (Forensic Audit Ledger, Statement & Integrity Verification)
->>>>>>> 602c9e517349676e2c5577e0632b15c6f45a164d
   # ============================================================================
   audit-service:
     profiles:
