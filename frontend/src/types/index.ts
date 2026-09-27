@@ -67,3 +67,29 @@ export interface GatewayRoute {
   predicates: string[];
   order?: number;
 }
+
+export interface AuditRecord {
+  auditId: number;
+  transactionId: number;
+  accountId: number;
+  referenceNo?: string;
+  transactionType: string;
+  amount: number;
+  oldBalance: number;
+  newBalance: number;
+  previousHash: string;
+  currentHash: string;
+  actorId?: number;
+  clientIp?: string;
+  eventTimestamp: string;
+}
+
+export interface ChainVerificationResult {
+  accountId: number;
+  totalRecordsVerified: number;
+  isChainIntact: boolean;
+  latestHash?: string;
+  verifiedAt: string;
+  message: string;
+}
+

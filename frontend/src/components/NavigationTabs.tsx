@@ -1,7 +1,6 @@
-import React from 'react';
-import { LayoutDashboard, ArrowLeftRight, BellRing, Network, KeyRound } from 'lucide-react';
+import { LayoutDashboard, ArrowLeftRight, BellRing, Network, KeyRound, ShieldCheck } from 'lucide-react';
 
-export type TabType = 'dashboard' | 'transfer' | 'notifications' | 'topology' | 'auth';
+export type TabType = 'dashboard' | 'transfer' | 'audit' | 'notifications' | 'topology' | 'auth';
 
 interface NavigationTabsProps {
   activeTab: TabType;
@@ -17,6 +16,7 @@ export const NavigationTabs: React.FC<NavigationTabsProps> = ({
   const tabs = [
     { id: 'dashboard', label: 'Dashboard & Balances', icon: LayoutDashboard },
     { id: 'transfer', label: 'Idempotent Transfer Engine', icon: ArrowLeftRight },
+    { id: 'audit', label: 'Audit & Compliance', icon: ShieldCheck },
     { id: 'notifications', label: 'In-App Alerts', icon: BellRing, badge: unreadCount },
     { id: 'topology', label: 'Gateway & Architecture', icon: Network },
     { id: 'auth', label: 'Identity & Tokens', icon: KeyRound },

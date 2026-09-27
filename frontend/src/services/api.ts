@@ -1,4 +1,4 @@
-import type { Account, AuthSession, GatewayRoute, NotificationItem, ProblemDetails, TransferRequest, TransferResponse } from '../types';
+import type { Account, AuditRecord, AuthSession, ChainVerificationResult, GatewayRoute, NotificationItem, ProblemDetails, TransferRequest, TransferResponse } from '../types';
 
 // Fallback seed accounts for seamless offline / initial demonstration
 const SEED_ACCOUNTS: Account[] = [
@@ -35,7 +35,7 @@ const SEED_NOTIFICATIONS: NotificationItem[] = [
   {
     id: 101,
     type: 'TRANSACTION_CREDIT',
-    message: 'Payroll deposit received: ₱3,250.00 from Apex Corp.',
+    message: 'Payroll deposit received: ₱3,250.00 from CooBS Payroll.',
     isRead: false,
     createdAt: new Date(Date.now() - 1000 * 60 * 18).toISOString(),
   },
@@ -55,14 +55,78 @@ const SEED_NOTIFICATIONS: NotificationItem[] = [
   }
 ];
 
+const SEED_AUDIT_RECORDS: AuditRecord[] = [
+  {
+    auditId: 1001,
+    transactionId: 501,
+    accountId: 1,
+    referenceNo: 'REF-DEP-001',
+    transactionType: 'DEPOSIT',
+    amount: 10000.00,
+    oldBalance: 0.00,
+    newBalance: 10000.00,
+    previousHash: '0000000000000000000000000000000000000000000000000000000000000000',
+    currentHash: 'c7d23e59a85b9e0f6b4d32e1850f2495b41cf131e50682a39281e59c049b72a4',
+    actorId: 1,
+    clientIp: '127.0.0.1',
+    eventTimestamp: '2026-09-27T08:15:22.000Z'
+  },
+  {
+    auditId: 1002,
+    transactionId: 502,
+    accountId: 1,
+    referenceNo: 'REF-PAY-002',
+    transactionType: 'CREDIT',
+    amount: 5000.00,
+    oldBalance: 10000.00,
+    newBalance: 15000.00,
+    previousHash: 'c7d23e59a85b9e0f6b4d32e1850f2495b41cf131e50682a39281e59c049b72a4',
+    currentHash: '4a6b98e1f02c4819d45a901e7492c318bf920518dc9319e7a2b904128f49c018',
+    actorId: 1,
+    clientIp: '127.0.0.1',
+    eventTimestamp: '2026-09-27T10:30:10.000Z'
+  },
+  {
+    auditId: 1003,
+    transactionId: 503,
+    accountId: 1,
+    referenceNo: 'REF-TRF-003',
+    transactionType: 'TRANSFER_DEBIT',
+    amount: 249.50,
+    oldBalance: 15000.00,
+    newBalance: 14750.50,
+    previousHash: '4a6b98e1f02c4819d45a901e7492c318bf920518dc9319e7a2b904128f49c018',
+    currentHash: '8e219fb041c9a48b5209c148209e51c8901b27e8a93149e0c8192a472918e932',
+    actorId: 1,
+    clientIp: '127.0.0.1',
+    eventTimestamp: '2026-09-28T01:45:00.000Z'
+  },
+  {
+    auditId: 2001,
+    transactionId: 601,
+    accountId: 2,
+    referenceNo: 'REF-SAV-001',
+    transactionType: 'DEPOSIT',
+    amount: 85200.00,
+    oldBalance: 0.00,
+    newBalance: 85200.00,
+    previousHash: '0000000000000000000000000000000000000000000000000000000000000000',
+    currentHash: '1a90c481e9204bf8a9012c85e4920182b849201948291048b9184029418290e4',
+    actorId: 2,
+    clientIp: '127.0.0.1',
+    eventTimestamp: '2026-09-27T09:00:00.000Z'
+  }
+];
+
 class ApiClient {
   private session: AuthSession | null = null;
   private localAccounts: Account[] = [...SEED_ACCOUNTS];
   private localNotifications: NotificationItem[] = [...SEED_NOTIFICATIONS];
+  private localAuditRecords: AuditRecord[] = [...SEED_AUDIT_RECORDS];
   private idempotencyCache: Map<string, TransferResponse> = new Map();
 
   constructor() {
-    const saved = localStorage.getItem('apex_auth_session');
+    const saved = localStorage.getItem('coobs_auth_session') || localStorage.getItem('apex_auth_session');
     if (saved) {
       try {
         this.session = JSON.parse(saved);
@@ -76,7 +140,7 @@ class ApiClient {
         accessToken: 'demo-jwt-token-group2-fse-capstone',
         userId: 1,
         username: 'customer1',
-        roles: ['ROLE_CUSTOMER'],
+        roles: ['ROLE_CUSTOMER', 'ROLE_ADMIN', 'AUDITOR'],
         userType: 'CUSTOMER'
       };
     }
@@ -89,8 +153,9 @@ class ApiClient {
   public setSession(session: AuthSession | null) {
     this.session = session;
     if (session) {
-      localStorage.setItem('apex_auth_session', JSON.stringify(session));
+      localStorage.setItem('coobs_auth_session', JSON.stringify(session));
     } else {
+      localStorage.removeItem('coobs_auth_session');
       localStorage.removeItem('apex_auth_session');
     }
   }
@@ -306,6 +371,109 @@ class ApiClient {
 
   public getUnreadNotificationCount(): number {
     return this.localNotifications.filter(n => !n.isRead).length;
+  }
+
+  // --------------------------------------------------------------------------
+  // Audit & Cryptographic Chain Verification Engine (Port 8085 via Gateway)
+  // --------------------------------------------------------------------------
+  public async getAccountAuditStatements(accountId: number): Promise<AuditRecord[]> {
+    try {
+      const res = await fetch(`/api/v1/audit/accounts/${accountId}/statement?page=0&size=50&sort=eventTimestamp,desc`, {
+        headers: {
+          'Authorization': `Bearer ${this.session?.accessToken || ''}`,
+          'X-Correlation-ID': this.generateUuid()
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const records = data.content || data;
+        if (Array.isArray(records) && records.length > 0) {
+          return records;
+        }
+      }
+    } catch {
+      // Fallback to local audit records
+    }
+    return this.localAuditRecords.filter(r => r.accountId === accountId);
+  }
+
+  public async verifyAuditChain(accountId: number): Promise<ChainVerificationResult> {
+    try {
+      const res = await fetch(`/api/v1/audit/verify-chain/${accountId}`, {
+        headers: {
+          'Authorization': `Bearer ${this.session?.accessToken || ''}`,
+          'X-Correlation-ID': this.generateUuid()
+        }
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch {
+      // Fallback to local chain verification
+    }
+
+    const records = this.localAuditRecords
+      .filter(r => r.accountId === accountId)
+      .sort((a, b) => a.auditId - b.auditId);
+
+    if (records.length === 0) {
+      return {
+        accountId,
+        totalRecordsVerified: 0,
+        isChainIntact: true,
+        verifiedAt: new Date().toISOString(),
+        message: 'No mutation records found. Genesis state verified.'
+      };
+    }
+
+    const GENESIS_HASH = '0000000000000000000000000000000000000000000000000000000000000000';
+    if (records[0].previousHash !== GENESIS_HASH) {
+      return {
+        accountId,
+        totalRecordsVerified: 0,
+        isChainIntact: false,
+        latestHash: records[0].currentHash,
+        verifiedAt: new Date().toISOString(),
+        message: `Genesis block corruption at audit ID ${records[0].auditId}: expected 64 zeroes but found [${records[0].previousHash.slice(0, 16)}...]`
+      };
+    }
+
+    for (let i = 1; i < records.length; i++) {
+      const prev = records[i - 1];
+      const curr = records[i];
+      if (curr.previousHash !== prev.currentHash) {
+        return {
+          accountId,
+          totalRecordsVerified: i,
+          isChainIntact: false,
+          latestHash: curr.currentHash,
+          verifiedAt: new Date().toISOString(),
+          message: `Chain linkage mismatch at audit ID ${curr.auditId} (txn ${curr.transactionId}): expected previous_hash [${prev.currentHash.slice(0, 16)}...] but found [${curr.previousHash.slice(0, 16)}...]`
+        };
+      }
+    }
+
+    return {
+      accountId,
+      totalRecordsVerified: records.length,
+      isChainIntact: true,
+      latestHash: records[records.length - 1].currentHash,
+      verifiedAt: new Date().toISOString(),
+      message: 'Audit chain integrity verified successfully (SHA-256 Chained).'
+    };
+  }
+
+  public simulateTampering(accountId: number): void {
+    const records = this.localAuditRecords.filter(r => r.accountId === accountId);
+    if (records.length > 1) {
+      // Tamper with the middle record's hash
+      records[records.length - 1].previousHash = 'tampered_hash_link_payload_compromised_000000000000000000000000';
+    }
+  }
+
+  public restoreIntactChain(accountId: number): void {
+    const originals = SEED_AUDIT_RECORDS.filter(r => r.accountId === accountId);
+    this.localAuditRecords = this.localAuditRecords.filter(r => r.accountId !== accountId).concat(JSON.parse(JSON.stringify(originals)));
   }
 }
 

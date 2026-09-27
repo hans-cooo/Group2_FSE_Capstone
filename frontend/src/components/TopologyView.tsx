@@ -60,13 +60,13 @@ export const TopologyView: React.FC<TopologyViewProps> = ({
       color: 'var(--color-warning)'
     },
     {
-      name: 'Audit Service (Teammate)',
+      name: 'Audit & Compliance Service',
       port: '8085',
-      role: 'Forensic Audit Ingestion & Merkle Tree Proofs',
-      tech: 'Spring Boot 3.3.4 / PostgreSQL SHA-256',
-      status: 'STANDBY / INTEGRATING',
+      role: 'Cryptographic SHA-256 Hash Chaining & Forensic Statement Engine',
+      tech: 'Spring Boot 3.3.4 / PostgreSQL 16 (Port 5434) / JJWT',
+      status: 'OPERATIONAL',
       icon: Database,
-      color: 'var(--text-subtle)'
+      color: 'var(--color-success)'
     }
   ];
 

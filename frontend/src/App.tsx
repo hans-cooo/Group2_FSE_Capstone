@@ -5,6 +5,7 @@ import { DashboardView } from './components/DashboardView';
 import { TransferView } from './components/TransferView';
 import { NotificationView } from './components/NotificationView';
 import { TopologyView } from './components/TopologyView';
+import { AuditView } from './components/AuditView';
 import { AuthModal } from './components/AuthModal';
 import { apiClient } from './services/api';
 import type { Account, AuthSession, GatewayRoute, NotificationItem, TransferRequest, TransferResponse } from './types';
@@ -187,6 +188,12 @@ export function App() {
           />
         )}
 
+        {activeTab === 'audit' && (
+          <AuditView
+            accounts={accounts}
+          />
+        )}
+
         {activeTab === 'notifications' && (
           <NotificationView
             notifications={notifications}
@@ -231,7 +238,7 @@ export function App() {
           gap: '16px'
         }}>
           <div>
-            <span style={{ fontWeight: '700', color: '#ffffff' }}>Apex Core Banking System</span> &mdash; Fullstack Capstone Architecture
+            <span style={{ fontWeight: '700', color: '#ffffff' }}>CooBS Core Banking System</span> &mdash; Fullstack Capstone Architecture
             <div style={{ marginTop: '4px' }}>
               Microservices: Edge Gateway (8080) &bull; Auth (8081) &bull; Account (8082) &bull; Ledger (8083) &bull; Notification (8084) &bull; Audit (8085)
             </div>

@@ -63,7 +63,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   const handleSelectPersona = (p: typeof personas[0]) => {
     const newSession: AuthSession = {
-      accessToken: `apex-token-${p.username}-${Date.now()}`,
+      accessToken: `coobs-token-${p.username}-${Date.now()}`,
       userId: p.id,
       username: p.username,
       roles: [p.role],
@@ -103,7 +103,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             userType: data.roles?.includes('ROLE_ADMIN') ? 'ADMIN' : (data.roles?.includes('ROLE_TELLER') ? 'TELLER' : 'CUSTOMER')
           };
           onSessionChange(session);
-          setSuccessMsg('Authentication successful! Welcome to Apex Core Banking.');
+          setSuccessMsg('Authentication successful! Welcome to CooBS Core Banking.');
           setTimeout(() => {
             onClose();
           }, 1000);
