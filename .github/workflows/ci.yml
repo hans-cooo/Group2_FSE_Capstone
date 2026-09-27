@@ -44,14 +44,14 @@ jobs:
 
       - name: Verify core project directories & artifacts
         run: |
-          for svc in api-gateway auth-service account-service ledger-service notification-service; do
+          for svc in api-gateway auth-service account-service ledger-service notification-service audit-service; do
             test -f "backend/$svc/pom.xml" || (echo "backend/$svc/pom.xml missing!" && exit 1)
             test -f "backend/$svc/mvnw" || (echo "backend/$svc/mvnw missing!" && exit 1)
             echo "  [FOUND] Microservice backend/$svc verified."
           done
           test -f database/oracle/01_init_user.sql || (echo "Oracle init SQL missing!" && exit 1)
           test -f database/postgres/01_init_db.sql || (echo "Postgres init SQL missing!" && exit 1)
-          echo "All 5 core microservices and database definitions verified."
+          echo "All 6 core microservices and database definitions verified."
 
   # ============================================================================
   # JOB 2: PostgreSQL Immutable Audit Store & Cryptographic Triggers
@@ -405,6 +405,16 @@ jobs:
           source .env
           set +a
           cd backend/notification-service
+          chmod +x mvnw
+          ./mvnw clean test -B --no-transfer-progress
+
+      - name: Test Audit Service (Forensic Ledger / SHA-256 Chaining / Integrity)
+        run: |
+          set -a
+          # shellcheck disable=SC1091
+          source .env
+          set +a
+          cd backend/audit-service
           chmod +x mvnw
           ./mvnw clean test -B --no-transfer-progress
 

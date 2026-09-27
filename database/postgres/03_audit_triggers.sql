@@ -26,10 +26,11 @@ BEGIN
 
     NEW.previous_hash := v_last_hash;
 
-    -- Compute SHA-256 hash across tamper-critical fields
+    -- Compute SHA-256 hash across tamper-critical fields including reference_no
     v_payload := v_last_hash || '|' ||
                  NEW.transaction_id || '|' ||
                  NEW.account_id || '|' ||
+                 COALESCE(NEW.reference_no, '') || '|' ||
                  NEW.transaction_type || '|' ||
                  NEW.amount || '|' ||
                  NEW.new_balance || '|' ||

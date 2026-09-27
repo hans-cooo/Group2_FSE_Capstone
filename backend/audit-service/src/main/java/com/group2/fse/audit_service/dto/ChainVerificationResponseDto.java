@@ -14,6 +14,7 @@ import lombok.NoArgsConstructor;
 public class ChainVerificationResponseDto {
     private Long accountId;
     private long totalRecordsVerified;
+    @com.fasterxml.jackson.annotation.JsonProperty("isChainIntact")
     private boolean isChainIntact;
     private String latestHash;
     private LocalDateTime verifiedAt;
