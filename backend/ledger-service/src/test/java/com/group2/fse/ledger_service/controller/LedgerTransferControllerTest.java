@@ -6,11 +6,12 @@ import com.group2.fse.ledger_service.dto.TransferResponseDto;
 import com.group2.fse.ledger_service.exception.GlobalExceptionHandler;
 import com.group2.fse.ledger_service.exception.InsufficientFundsException;
 import com.group2.fse.ledger_service.service.AccountBalanceService;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
@@ -33,7 +34,6 @@ class LedgerTransferControllerTest {
     @Mock
     private AccountBalanceService accountBalanceService;
 
-    @InjectMocks
     private LedgerTransferController controller;
 
     private MockMvc mockMvc;
@@ -41,6 +41,7 @@ class LedgerTransferControllerTest {
 
     @BeforeEach
     void setUp() {
+        controller = new LedgerTransferController(accountBalanceService, new SimpleMeterRegistry());
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();

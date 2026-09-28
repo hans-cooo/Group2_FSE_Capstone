@@ -24,11 +24,20 @@ import org.springframework.web.bind.annotation.RestController;
 @Slf4j
 @RestController
 @RequestMapping("/api/v1/ledger")
-@RequiredArgsConstructor
 public class LedgerTransferController {
 
     private final AccountBalanceService accountBalanceService;
     private final MeterRegistry meterRegistry;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public LedgerTransferController(AccountBalanceService accountBalanceService, MeterRegistry meterRegistry) {
+        this.accountBalanceService = accountBalanceService;
+        this.meterRegistry = meterRegistry != null ? meterRegistry : new io.micrometer.core.instrument.simple.SimpleMeterRegistry();
+    }
+
+    public LedgerTransferController(AccountBalanceService accountBalanceService) {
+        this(accountBalanceService, new io.micrometer.core.instrument.simple.SimpleMeterRegistry());
+    }
 
     @PostMapping({"/transfers", "/transfer"})
     public ResponseEntity<TransferResponseDto> transfer(

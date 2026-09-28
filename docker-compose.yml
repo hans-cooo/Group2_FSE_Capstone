@@ -372,6 +372,8 @@ services:
         condition: service_healthy
       audit-service:
         condition: service_healthy
+      redis-cache:
+        condition: service_healthy
     environment:
       SERVER_PORT: 8080
       AUTH_SERVICE_URL: http://auth-service:8081
@@ -379,6 +381,8 @@ services:
       LEDGER_SERVICE_URL: http://ledger-service:8083
       NOTIFICATION_SERVICE_URL: http://notification-service:8084
       AUDIT_SERVICE_URL: http://audit-service:8085
+      REDIS_HOST: redis-cache
+      REDIS_PORT: 6379
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/actuator/health"]
       interval: 15s
