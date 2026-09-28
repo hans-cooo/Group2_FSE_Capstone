@@ -5,6 +5,9 @@ import com.group2.fse.account_service.entity.Customer;
 import com.group2.fse.account_service.entity.Kyc;
 import com.group2.fse.account_service.entity.KycUpdateRequest;
 import com.group2.fse.account_service.entity.User;
+import com.group2.fse.account_service.event.AccountEventPublisher;
+import com.group2.fse.account_service.event.KycRequestEvaluatedEvent;
+import com.group2.fse.account_service.event.KycRequestSubmittedEvent;
 import com.group2.fse.account_service.exception.CustomerNotFoundException;
 import com.group2.fse.account_service.exception.KycNotFoundException;
 import com.group2.fse.account_service.exception.KycRequestNotFoundException;
@@ -31,6 +34,7 @@ public class CustomerServiceImpl implements CustomerService {
     private final KycRepository kycRepository;
     private final KycUpdateRequestRepository kycUpdateRequestRepository;
     private final UserRepository userRepository;
+    private final AccountEventPublisher accountEventPublisher;
 
     @Override
     @Transactional(readOnly = true)
@@ -117,6 +121,17 @@ public class CustomerServiceImpl implements CustomerService {
         KycUpdateRequest saved = kycUpdateRequestRepository.save(updateRequest);
         log.info("Submitted KYC update request #{} for customer ID {}", saved.getKycRequestId(), customerId);
 
+        if (accountEventPublisher != null) {
+            accountEventPublisher.publishKycSubmitted(KycRequestSubmittedEvent.builder()
+                    .payload(KycRequestSubmittedEvent.KycSubmittedPayload.builder()
+                            .requestId(saved.getKycRequestId())
+                            .customerId(customerId)
+                            .status(saved.getStatus())
+                            .submittedAt(saved.getRequestedAt() != null ? saved.getRequestedAt().toString() : LocalDateTime.now().toString())
+                            .build())
+                    .build());
+        }
+
         return KycRequestResponse.builder()
                 .kycRequestId(saved.getKycRequestId())
                 .kycId(kyc.getKycId())
@@ -196,6 +211,20 @@ public class CustomerServiceImpl implements CustomerService {
 
         log.info("Approved KYC update request #{} by staff ID {}", requestId, staffUserId);
 
+        Long custId = (kyc.getCustomer() != null) ? kyc.getCustomer().getCustomerId() : null;
+        if (accountEventPublisher != null && custId != null) {
+            accountEventPublisher.publishKycEvaluated(KycRequestEvaluatedEvent.builder()
+                    .payload(KycRequestEvaluatedEvent.KycEvaluatedPayload.builder()
+                            .requestId(updateReq.getKycRequestId())
+                            .customerId(custId)
+                            .status("APPROVED")
+                            .reviewedByStaffId(staffUserId)
+                            .reviewedAt(updateReq.getApprovedAt() != null ? updateReq.getApprovedAt().toString() : LocalDateTime.now().toString())
+                            .rejectionReason(null)
+                            .build())
+                    .build());
+        }
+
         return KycRequestResponse.builder()
                 .kycRequestId(updateReq.getKycRequestId())
                 .status("APPROVED")
@@ -223,6 +252,22 @@ public class CustomerServiceImpl implements CustomerService {
         kycUpdateRequestRepository.save(updateReq);
 
         log.info("Rejected KYC update request #{} by staff ID {}. Reason: {}", requestId, staffUserId, rejectionReason);
+
+        Long custId = (updateReq.getKyc() != null && updateReq.getKyc().getCustomer() != null)
+                ? updateReq.getKyc().getCustomer().getCustomerId()
+                : null;
+        if (accountEventPublisher != null && custId != null) {
+            accountEventPublisher.publishKycEvaluated(KycRequestEvaluatedEvent.builder()
+                    .payload(KycRequestEvaluatedEvent.KycEvaluatedPayload.builder()
+                            .requestId(updateReq.getKycRequestId())
+                            .customerId(custId)
+                            .status("REJECTED")
+                            .reviewedByStaffId(staffUserId)
+                            .reviewedAt(updateReq.getApprovedAt() != null ? updateReq.getApprovedAt().toString() : LocalDateTime.now().toString())
+                            .rejectionReason(rejectionReason)
+                            .build())
+                    .build());
+        }
 
         return KycRequestResponse.builder()
                 .kycRequestId(updateReq.getKycRequestId())

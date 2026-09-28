@@ -210,6 +210,7 @@ The repository provides two test execution methods for validating platform relia
 | **CooBS Core Banking API**  | [`scripts/test_api_endpoints.ps1`](scripts/test_api_endpoints.ps1)                         | [`postman/CooBS_Core_Banking.postman_collection.json`](postman/CooBS_Core_Banking.postman_collection.json)                           | **13-Point Platform Operational Health & Transfer Flow**:• Gateway health check (`/actuator/health`) and dynamic route discovery.• Customer & Staff (Admin/Teller) JWT token authentication and claim extraction.• Account discovery & Redis-cached balance lookups.• Atomic double-entry transfer execution with balance mutation.• Sub-2ms Redis mutex idempotency replay verification.• Overdraft invariant guard (`HTTP 422 INSUFFICIENT_FUNDS`).• Kafka event-driven notification dispatch & consumption.• PostgreSQL audit statement retrieval and SHA-256 cryptographic chain verification.                                                                                                                                                                                                                                                                                                                                                                                              |
 | **User Lifecycle Flow**     | [`scripts/test_user_lifecycle_flow.ps1`](scripts/test_user_lifecycle_flow.ps1)             | [`postman/User_Lifecycle_Flow.postman_collection.json`](postman/User_Lifecycle_Flow.postman_collection.json)                         | **8-Stage End-to-End Customer Lifecycle Journey**:1. Register brand-new customer with dynamic credentials.2. Customer login and JWT bearer acquisition.3. Customer submits initial KYC identity verification.4. Teller login (`teller_alice`) & savings account provisioning.5. Customer submits KYC change/update request.6. Admin login (`admin`) & approval of KYC update.7. Customer submits account closure request.8. Admin approves account closure & transitions status to `CLOSED`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | **Edge Cases & Compliance** | [`scripts/test_edge_cases_and_compliance.ps1`](scripts/test_edge_cases_and_compliance.ps1) | [`postman/CooBS_Edge_Cases_And_Compliance.postman_collection.json`](postman/CooBS_Edge_Cases_And_Compliance.postman_collection.json) | **14 Negative-Testing, Invariant Guard & Rejection Workflows**:• **RBAC Security Guard**: Customers attempting to access staff endpoints are blocked (`HTTP 403 Forbidden`).• **Token Blacklist**: Token revocation (`POST /token/revoke`) and immediate reuse blocked via Redis (`HTTP 401 Unauthorized`).• **Transfer Invariants**: Self-transfer rejected (`HTTP 400`), missing `Idempotency-Key` rejected (`HTTP 400`), non-positive/zero amount rejected (`HTTP 400`), non-existent account rejected (`HTTP 404`).• **Compliance Guard**: Non-zero balance account closure rejected (`HTTP 400`).• **Account Status Controls**: Freezing and unfreezing accounts (`FROZEN` <-> `ACTIVE`).• **Risk Controls**: Imposing risk flags/holds on accounts and lifting them.• **Administrative Rejections**: KYC update request rejected (`REJECTED`) and account closure rejected (`REJECTED`) with audit reasons.• **Notification State**: Marking in-app notification as read (`PATCH /read`). |
+| **Kafka Event-Driven Verification**   | [`scripts/test_kafka_events.ps1`](scripts/test_kafka_events.ps1)                           | [`postman/CooBS_Kafka_Event_Driven_Verification.postman_collection.json`](postman/CooBS_Kafka_Event_Driven_Verification.postman_collection.json) | **15-Step Event-Driven Notification Verification Flow**:<br>• **Successful Transfer Pipeline**: `ledger-service` emits `ledger.transfer.completed.v1` -> `notification-service` generates dual alerts: sender ("Funds Transfer Sent") & recipient ("Funds Transfer Received").<br>• **Failed Transfer Pipeline**: Overdraft / insufficient funds emits `ledger.transfer.failed.v1` -> sender alerted ("Funds Transfer Failed") with failure reason.<br>• **KYC Submission**: Customer submits KYC update emitting `kyc.request.submitted.v1` -> customer notified ("KYC Update Submitted").<br>• **KYC Approval**: Staff approves request emitting `kyc.request.evaluated.v1` -> customer notified ("KYC Update Approved").<br>• **KYC Rejection**: Staff rejects request emitting `kyc.request.evaluated.v1` -> customer notified ("KYC Update Rejected").<br>• **Direct Verification**: Automatically queries `/api/v1/notifications/my-notifications` to verify that Kafka asynchronous delivery succeeded end-to-end without requiring manual UI monitoring. |
 
 ---
 
@@ -235,10 +236,16 @@ powershell -ExecutionPolicy Bypass -File scripts/test_user_lifecycle_flow.ps1
 powershell -ExecutionPolicy Bypass -File scripts/test_edge_cases_and_compliance.ps1
 ```
 
-#### Run All 3 Suites Sequentially:
+#### 4. Kafka Event-Driven Verification Test Suite:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -Command "& 'scripts/test_api_endpoints.ps1'; & 'scripts/test_user_lifecycle_flow.ps1'; & 'scripts/test_edge_cases_and_compliance.ps1'"
+powershell -ExecutionPolicy Bypass -File scripts/test_kafka_events.ps1
+```
+
+#### Run All 4 Suites Sequentially:
+
+```powershell
+powershell -ExecutionPolicy Bypass -Command "& 'scripts/test_api_endpoints.ps1'; & 'scripts/test_user_lifecycle_flow.ps1'; & 'scripts/test_edge_cases_and_compliance.ps1'; & 'scripts/test_kafka_events.ps1'"
 ```
 
 _(Note: Pass `-GatewayUrl http://<host>:<port>` if targeting an environment other than default `http://localhost:8080`.)_
@@ -264,6 +271,11 @@ newman run postman/User_Lifecycle_Flow.postman_collection.json \
 newman run postman/CooBS_Edge_Cases_And_Compliance.postman_collection.json \
   -e postman/CooBS_Local.postman_environment.json \
   --delay-request 100
+
+# 4. Kafka Event-Driven Verification
+newman run postman/CooBS_Kafka_Event_Driven_Verification.postman_collection.json \
+  -e postman/CooBS_Local.postman_environment.json \
+  --delay-request 100
 ```
 
 ### Running via Postman Desktop:
@@ -272,6 +284,21 @@ newman run postman/CooBS_Edge_Cases_And_Compliance.postman_collection.json \
 2. Import the environment file [`postman/CooBS_Local.postman_environment.json`](postman/CooBS_Local.postman_environment.json).
 3. Select the `CooBS Local (Docker Gateway)` environment in Postman.
 4. Execute via the Collection Runner.
+
+---
+
+### Visualizing Kafka Events in Real-Time (Kafka UI)
+
+While the automated test suites assert Kafka event delivery directly by querying `/api/v1/notifications/my-notifications`, you can also observe live messages flowing through the cluster in **Kafka UI**:
+
+1. Open **`http://localhost:8088`** in your browser.
+2. Select the **`local-cluster`** dashboard.
+3. In the left navigation, click **Topics**:
+   - `ledger.transfer.completed.v1`: Successful fund transfers.
+   - `ledger.transfer.failed.v1`: Failed/rejected transfers with reason strings.
+   - `kyc.request.submitted.v1`: Customer KYC update requests.
+   - `kyc.request.evaluated.v1`: Staff approval or rejection decisions.
+4. Click on any topic and select the **Messages** tab to view real-time JSON payloads, headers, partition keys (`customerId` / `sourceAccountId`), and timestamps.
 
 ---
 

@@ -71,7 +71,7 @@ public class CustomerController {
         return ResponseEntity.ok(response);
     }
 
-    @PostMapping("/kyc/update-requests/{id}/approve")
+    @PostMapping({"/kyc/update-requests/{id}/approve", "/kyc/update-request/{id}/approve"})
     @PreAuthorize("hasAnyRole('TELLER', 'ADMIN')")
     public ResponseEntity<KycRequestResponse> approveKycUpdateRequest(
             @PathVariable Long id,
@@ -81,7 +81,7 @@ public class CustomerController {
         return ResponseEntity.ok(response);
     }
 
-    @PostMapping("/kyc/update-requests/{id}/reject")
+    @PostMapping({"/kyc/update-requests/{id}/reject", "/kyc/update-request/{id}/reject"})
     @PreAuthorize("hasAnyRole('TELLER', 'ADMIN')")
     public ResponseEntity<KycRequestResponse> rejectKycUpdateRequest(
             @PathVariable Long id,

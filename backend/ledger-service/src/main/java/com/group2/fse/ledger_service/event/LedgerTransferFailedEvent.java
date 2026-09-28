@@ -11,20 +11,19 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * Task: FSE-501
- * Domain Event published immediately post-commit for double-entry atomic account transfers.
+ * Domain Event published when an account transfer fails validation or execution.
  */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class LedgerTransferEvent {
+public class LedgerTransferFailedEvent {
 
     @Builder.Default
     private String eventId = "evt_" + UUID.randomUUID();
 
     @Builder.Default
-    private String eventType = "LEDGER_TRANSFER_COMPLETED";
+    private String eventType = "LEDGER_TRANSFER_FAILED";
 
     @Builder.Default
     private Instant timestamp = Instant.now();
@@ -32,33 +31,22 @@ public class LedgerTransferEvent {
     @Builder.Default
     private String version = "1.0";
 
-    private TransferPayload payload;
+    private FailedTransferPayload payload;
 
     @Data
     @Builder
     @NoArgsConstructor
     @AllArgsConstructor
-    public static class TransferPayload {
+    public static class FailedTransferPayload {
         private String transferReference;
         private Long sourceAccountId;
         private Long destinationAccountId;
+        private Long sourceCustomerId;
 
         @JsonFormat(shape = JsonFormat.Shape.STRING)
         private BigDecimal amount;
 
-        @JsonFormat(shape = JsonFormat.Shape.STRING)
-        private BigDecimal sourcePreviousBalance;
-
-        @JsonFormat(shape = JsonFormat.Shape.STRING)
-        private BigDecimal sourceNewBalance;
-
-        @JsonFormat(shape = JsonFormat.Shape.STRING)
-        private BigDecimal destinationPreviousBalance;
-
-        @JsonFormat(shape = JsonFormat.Shape.STRING)
-        private BigDecimal destinationNewBalance;
-
-        private Long sourceCustomerId;
-        private Long destinationCustomerId;
+        private String failureReason;
+        private String errorCode;
     }
 }
