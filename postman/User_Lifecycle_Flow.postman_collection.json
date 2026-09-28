@@ -1,0 +1,526 @@
+{
+  "info": {
+    "_postman_id": "b73a5a41-2c70-4e28-89c5-7f938f32dae1",
+    "name": "Core Banking - Complete User Lifecycle Flow",
+    "description": "End-to-End user flow: Customer Registration -> Login -> KYC Submit -> Teller Opens Account -> Customer KYC Update -> Admin Approves KYC -> Customer Account Closure Request -> Admin Approves Closure.\n\nAll variables are prefixed with 'flow_' to prevent conflicts with active environments.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "flow_customerUsername",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "flow_customerEmail",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "flow_customerPassword",
+      "value": "Password123!",
+      "type": "string"
+    },
+    {
+      "key": "flow_customerId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "flow_customerToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "flow_tellerUsername",
+      "value": "teller_alice",
+      "type": "string"
+    },
+    {
+      "key": "flow_tellerPassword",
+      "value": "Password123!",
+      "type": "string"
+    },
+    {
+      "key": "flow_tellerToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "flow_adminUsername",
+      "value": "admin",
+      "type": "string"
+    },
+    {
+      "key": "flow_adminPassword",
+      "value": "Password123!",
+      "type": "string"
+    },
+    {
+      "key": "flow_adminToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "flow_accountId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "flow_accountNumber",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "flow_kycRequestId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "flow_closureRequestId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Step 1: New Customer Registration",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "var suffix = Date.now().toString().slice(-6);",
+              "var username = 'flow_cust_' + suffix;",
+              "var email = 'flow_' + suffix + '@bank.ph';",
+              "pm.collectionVariables.set('flow_customerUsername', username);",
+              "pm.environment.set('flow_customerUsername', username);",
+              "pm.collectionVariables.set('flow_customerEmail', email);",
+              "pm.environment.set('flow_customerEmail', email);",
+              "pm.collectionVariables.set('flow_customerPassword', 'Password123!');",
+              "pm.environment.set('flow_customerPassword', 'Password123!');",
+              "pm.collectionVariables.set('flow_tellerUsername', 'teller_alice');",
+              "pm.environment.set('flow_tellerUsername', 'teller_alice');",
+              "pm.collectionVariables.set('flow_tellerPassword', 'Password123!');",
+              "pm.environment.set('flow_tellerPassword', 'Password123!');",
+              "pm.collectionVariables.set('flow_adminUsername', 'admin');",
+              "pm.environment.set('flow_adminUsername', 'admin');",
+              "pm.collectionVariables.set('flow_adminPassword', 'Password123!');",
+              "pm.environment.set('flow_adminPassword', 'Password123!');"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Registration succeeds with 201 Created', function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "var res = pm.response.json();",
+              "pm.test('Customer ID is issued', function () {",
+              "    pm.expect(res.userId).to.exist;",
+              "    pm.collectionVariables.set('flow_customerId', res.userId);",
+              "    pm.environment.set('flow_customerId', res.userId);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{flow_customerUsername}}\",\n  \"password\": \"{{flow_customerPassword}}\",\n  \"email\": \"{{flow_customerEmail}}\",\n  \"firstName\": \"Alex\",\n  \"middleInitial\": \"M\",\n  \"lastName\": \"Rivera\",\n  \"address\": \"1204 Enterprise Center, Ayala Ave, Makati City\",\n  \"mobileNumber\": \"+639175551234\",\n  \"civilStatus\": \"Single\",\n  \"occupation\": \"Software Architect\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/auth/customers/register",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "auth", "customers", "register"]
+        }
+      }
+    },
+    {
+      "name": "Step 2: Customer Login",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Login succeeds with 200 OK', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "var res = pm.response.json();",
+              "pm.test('JWT Bearer token acquired', function () {",
+              "    pm.expect(res.authData).to.exist;",
+              "    pm.expect(res.authData.accessToken).to.be.a('string');",
+              "    pm.collectionVariables.set('flow_customerToken', res.authData.accessToken);",
+              "    pm.environment.set('flow_customerToken', res.authData.accessToken);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{flow_customerUsername}}\",\n  \"password\": \"{{flow_customerPassword}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/auth/customers/login",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "auth", "customers", "login"]
+        }
+      }
+    },
+    {
+      "name": "Step 3: Customer Submits Initial KYC",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('KYC submission returns 201 Created', function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "var res = pm.response.json();",
+              "pm.test('KYC status is VERIFIED / active', function () {",
+              "    pm.expect(res.status).to.be.oneOf(['VERIFIED', 'PENDING']);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{flow_customerToken}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"firstName\": \"Alex\",\n  \"middleInitial\": \"M\",\n  \"lastName\": \"Rivera\",\n  \"address\": \"1204 Enterprise Center, Ayala Ave, Makati City\",\n  \"civilStatus\": \"Single\",\n  \"occupation\": \"Software Architect\",\n  \"mobileNumber\": \"+639175551234\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/customers/kyc/submit",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "customers", "kyc", "submit"]
+        }
+      }
+    },
+    {
+      "name": "Step 4a: Teller Login",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Teller login returns 200 OK', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "var res = pm.response.json();",
+              "pm.test('Teller roles verified', function () {",
+              "    pm.expect(res.authData.roles).to.include('ROLE_TELLER');",
+              "    pm.collectionVariables.set('flow_tellerToken', res.authData.accessToken);",
+              "    pm.environment.set('flow_tellerToken', res.authData.accessToken);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{flow_tellerUsername}}\",\n  \"password\": \"{{flow_tellerPassword}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/auth/staff/login",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "auth", "staff", "login"]
+        }
+      }
+    },
+    {
+      "name": "Step 4b: Teller Opens Account for Customer",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Account creation returns 201 Created', function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "var res = pm.response.json();",
+              "pm.test('Account ID and Number generated', function () {",
+              "    pm.expect(res.accountId).to.exist;",
+              "    pm.expect(res.accountNumber).to.include('ACC_');",
+              "    pm.collectionVariables.set('flow_accountId', res.accountId);",
+              "    pm.environment.set('flow_accountId', res.accountId);",
+              "    pm.collectionVariables.set('flow_accountNumber', res.accountNumber);",
+              "    pm.environment.set('flow_accountNumber', res.accountNumber);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{flow_tellerToken}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"customerId\": {{flow_customerId}},\n  \"accountType\": \"SAVINGS\",\n  \"currency\": \"PHP\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/accounts",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "accounts"]
+        }
+      }
+    },
+    {
+      "name": "Step 5: Customer Submits KYC Update Details",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('KYC update request accepted with 202 Accepted', function () {",
+              "    pm.response.to.have.status(202);",
+              "});",
+              "var res = pm.response.json();",
+              "pm.test('Request ID returned with PENDING status', function () {",
+              "    pm.expect(res.kycRequestId).to.exist;",
+              "    pm.expect(res.status).to.eql('PENDING');",
+              "    pm.collectionVariables.set('flow_kycRequestId', res.kycRequestId);",
+              "    pm.environment.set('flow_kycRequestId', res.kycRequestId);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{flow_customerToken}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"newFirstName\": \"Alexander\",\n  \"newMiddleInitial\": \"M\",\n  \"newLastName\": \"Rivera-Cruz\",\n  \"newAddress\": \"Tower 2 High Street South, BGC, Taguig City\",\n  \"newMobileNumber\": \"+639189991234\",\n  \"newCivilStatus\": \"Married\",\n  \"newOccupation\": \"Chief Technology Officer\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/customers/kyc/update-request",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "customers", "kyc", "update-request"]
+        }
+      }
+    },
+    {
+      "name": "Step 6a: Admin Login",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Admin login returns 200 OK', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "var res = pm.response.json();",
+              "pm.test('ROLE_ADMIN verified', function () {",
+              "    pm.expect(res.authData.roles).to.include('ROLE_ADMIN');",
+              "    pm.collectionVariables.set('flow_adminToken', res.authData.accessToken);",
+              "    pm.environment.set('flow_adminToken', res.authData.accessToken);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{flow_adminUsername}}\",\n  \"password\": \"{{flow_adminPassword}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/auth/staff/login",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "auth", "staff", "login"]
+        }
+      }
+    },
+    {
+      "name": "Step 6b: Admin Approves KYC Update Request",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('KYC approval returns 200 OK', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "var res = pm.response.json();",
+              "pm.test('KYC update status is APPROVED', function () {",
+              "    pm.expect(res.status).to.eql('APPROVED');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{flow_adminToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/customers/kyc/update-requests/{{flow_kycRequestId}}/approve",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "customers", "kyc", "update-requests", "{{flow_kycRequestId}}", "approve"]
+        }
+      }
+    },
+    {
+      "name": "Step 7: Customer Submits Account Closure Request",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Closure request accepted with 202 Accepted', function () {",
+              "    pm.response.to.have.status(202);",
+              "});",
+              "var res = pm.response.json();",
+              "pm.test('Closure request ID returned with PENDING status', function () {",
+              "    pm.expect(res.closureRequestId).to.exist;",
+              "    pm.expect(res.status).to.eql('PENDING');",
+              "    pm.collectionVariables.set('flow_closureRequestId', res.closureRequestId);",
+              "    pm.environment.set('flow_closureRequestId', res.closureRequestId);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{flow_customerToken}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"reason\": \"Relocating abroad and consolidating bank accounts\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/accounts/{{flow_accountId}}/closure-request",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "accounts", "{{flow_accountId}}", "closure-request"]
+        }
+      }
+    },
+    {
+      "name": "Step 8: Admin Approves Account Closure Request",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Account closure approval returns 200 OK', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "var res = pm.response.json();",
+              "pm.test('Account status transitioned to CLOSED', function () {",
+              "    pm.expect(res.accountStatus).to.eql('CLOSED');",
+              "    pm.expect(res.message).to.include('closed successfully');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{flow_adminToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/accounts/closure-requests/{{flow_closureRequestId}}/approve",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "accounts", "closure-requests", "{{flow_closureRequestId}}", "approve"]
+        }
+      }
+    }
+  ]
+}
