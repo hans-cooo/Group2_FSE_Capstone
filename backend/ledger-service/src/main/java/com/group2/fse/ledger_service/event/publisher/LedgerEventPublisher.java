@@ -2,10 +2,12 @@ package com.group2.fse.ledger_service.event.publisher;
 
 import com.group2.fse.ledger_service.event.LedgerMutationEvent;
 import com.group2.fse.ledger_service.event.LedgerTransferEvent;
+import com.group2.fse.ledger_service.event.LedgerTransferFailedEvent;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.event.EventListener;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
@@ -37,6 +39,9 @@ public class LedgerEventPublisher {
 
     @Value("${ledger.kafka.topics.transfer:ledger.transfer.completed.v1}")
     private String transferTopic;
+
+    @Value("${ledger.kafka.topics.transfer-failed:ledger.transfer.failed.v1}")
+    private String transferFailedTopic;
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void handleMutationEvent(LedgerMutationEvent event) {
@@ -111,6 +116,45 @@ public class LedgerEventPublisher {
                 log.debug("Kafka producer closed during send for event [{}]", event.getEventId());
             } else {
                 log.error("Exception during Kafka dispatch for LedgerTransferEvent [{}]: {}",
+                        event.getEventId(), ex.getMessage(), ex);
+            }
+        }
+    }
+
+    @EventListener
+    public void handleTransferFailedEvent(LedgerTransferFailedEvent event) {
+        if (closed) {
+            log.warn("Attempted to publish LedgerTransferFailedEvent after publisher shutdown. Skipping.");
+            return;
+        }
+        if (event == null || event.getPayload() == null) {
+            log.warn("Skipping null ledger transfer failed event or empty payload");
+            return;
+        }
+
+        String partitionKey = String.valueOf(event.getPayload().getSourceAccountId());
+        log.info("Publishing LedgerTransferFailedEvent to Kafka topic [{}] with key [{}]: eventId={}, ref={}",
+                transferFailedTopic, partitionKey, event.getEventId(), event.getPayload().getTransferReference());
+
+        try {
+            kafkaTemplate.send(transferFailedTopic, partitionKey, event)
+                    .whenComplete((result, ex) -> {
+                        if (ex != null) {
+                            log.error("Failed to publish LedgerTransferFailedEvent [{}] to topic [{}]: {}",
+                                    event.getEventId(), transferFailedTopic, ex.getMessage(), ex);
+                        } else if (result != null && result.getRecordMetadata() != null) {
+                            log.info("Successfully published LedgerTransferFailedEvent [{}] to topic [{}] partition [{}] offset [{}]",
+                                    event.getEventId(),
+                                    transferFailedTopic,
+                                    result.getRecordMetadata().partition(),
+                                    result.getRecordMetadata().offset());
+                        }
+                    });
+        } catch (Exception ex) {
+            if (closed) {
+                log.debug("Kafka producer closed during send for event [{}]", event.getEventId());
+            } else {
+                log.error("Exception during Kafka dispatch for LedgerTransferFailedEvent [{}]: {}",
                         event.getEventId(), ex.getMessage(), ex);
             }
         }

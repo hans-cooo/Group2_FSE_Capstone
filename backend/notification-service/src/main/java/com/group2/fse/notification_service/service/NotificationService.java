@@ -6,8 +6,11 @@ import com.group2.fse.notification_service.dto.NotificationPageResponseDto;
 import com.group2.fse.notification_service.dto.NotificationReadResponseDto;
 import com.group2.fse.notification_service.dto.NotificationResponseDto;
 import com.group2.fse.notification_service.event.AccountClosureEvent;
+import com.group2.fse.notification_service.event.KycRequestEvaluatedEvent;
+import com.group2.fse.notification_service.event.KycRequestSubmittedEvent;
 import com.group2.fse.notification_service.event.LedgerMutationEvent;
 import com.group2.fse.notification_service.event.LedgerTransferEvent;
+import com.group2.fse.notification_service.event.LedgerTransferFailedEvent;
 import com.group2.fse.notification_service.exception.ResourceNotFoundException;
 import com.group2.fse.notification_service.repository.NotificationRepository;
 import lombok.RequiredArgsConstructor;
@@ -153,6 +156,133 @@ public class NotificationService {
         Notification saved = notificationRepository.save(notification);
         notificationDispatcher.dispatch(saved);
         log.info("Processed AccountClosureEvent [{}] for Customer [{}]", eventId, p.getCustomerId());
+    }
+
+    @Transactional
+    public void processTransferFailedEvent(LedgerTransferFailedEvent event) {
+        if (event == null || event.getPayload() == null) {
+            log.warn("Discarding null LedgerTransferFailedEvent or empty payload");
+            return;
+        }
+
+        String eventId = event.getEventId();
+        if (eventId != null && notificationRepository.existsByEventId(eventId)) {
+            log.info("Idempotent skip: Transfer Failed Event [{}] already processed.", eventId);
+            return;
+        }
+
+        LedgerTransferFailedEvent.FailedTransferPayload p = event.getPayload();
+        Long customerId = p.getSourceCustomerId() != null ? p.getSourceCustomerId() : p.getSourceAccountId();
+        if (customerId == null) {
+            log.warn("No customer or source account associated with failed transfer [{}]", eventId);
+            return;
+        }
+
+        String title = "Funds Transfer Failed";
+        String message = String.format("Transfer of PHP %s to account %s failed. Reason: %s (Ref: %s)",
+                p.getAmount() != null ? p.getAmount() : "0.00",
+                p.getDestinationAccountId(),
+                p.getFailureReason() != null ? p.getFailureReason() : "Transaction rejected",
+                p.getTransferReference() != null ? p.getTransferReference() : "N/A");
+
+        Notification notification = Notification.builder()
+                .customerId(customerId)
+                .title(title)
+                .message(message)
+                .channel(NotificationChannel.PUSH)
+                .isRead(false)
+                .eventId(eventId)
+                .createdAt(event.getTimestamp() != null ? event.getTimestamp() : Instant.now())
+                .build();
+
+        Notification saved = notificationRepository.save(notification);
+        notificationDispatcher.dispatch(saved);
+        log.info("Processed LedgerTransferFailedEvent [{}] -> Notification [{}] for Customer [{}]",
+                eventId, saved.getId(), customerId);
+    }
+
+    @Transactional
+    public void processKycSubmittedEvent(KycRequestSubmittedEvent event) {
+        if (event == null || event.getPayload() == null) {
+            log.warn("Discarding null KycRequestSubmittedEvent or empty payload");
+            return;
+        }
+
+        String eventId = event.getEventId();
+        if (eventId != null && notificationRepository.existsByEventId(eventId)) {
+            log.info("Idempotent skip: Kyc Submitted Event [{}] already processed.", eventId);
+            return;
+        }
+
+        KycRequestSubmittedEvent.KycSubmittedPayload p = event.getPayload();
+        Long customerId = p.getCustomerId();
+        if (customerId == null) {
+            log.warn("No customer associated with KYC submitted event [{}]", eventId);
+            return;
+        }
+
+        String title = "KYC Update Submitted";
+        String message = String.format("Your KYC update request #%s has been successfully submitted and is pending teller verification.",
+                p.getRequestId());
+
+        Notification notification = Notification.builder()
+                .customerId(customerId)
+                .title(title)
+                .message(message)
+                .channel(NotificationChannel.IN_APP)
+                .isRead(false)
+                .eventId(eventId)
+                .createdAt(event.getTimestamp() != null ? event.getTimestamp() : Instant.now())
+                .build();
+
+        Notification saved = notificationRepository.save(notification);
+        notificationDispatcher.dispatch(saved);
+        log.info("Processed KycRequestSubmittedEvent [{}] -> Notification [{}] for Customer [{}]",
+                eventId, saved.getId(), customerId);
+    }
+
+    @Transactional
+    public void processKycEvaluatedEvent(KycRequestEvaluatedEvent event) {
+        if (event == null || event.getPayload() == null) {
+            log.warn("Discarding null KycRequestEvaluatedEvent or empty payload");
+            return;
+        }
+
+        String eventId = event.getEventId();
+        if (eventId != null && notificationRepository.existsByEventId(eventId)) {
+            log.info("Idempotent skip: Kyc Evaluated Event [{}] already processed.", eventId);
+            return;
+        }
+
+        KycRequestEvaluatedEvent.KycEvaluatedPayload p = event.getPayload();
+        Long customerId = p.getCustomerId();
+        if (customerId == null) {
+            log.warn("No customer associated with KYC evaluated event [{}]", eventId);
+            return;
+        }
+
+        boolean isApproved = "APPROVED".equalsIgnoreCase(p.getStatus());
+        String title = isApproved ? "KYC Update Approved" : "KYC Update Rejected";
+        String message = isApproved
+                ? String.format("Your KYC update request #%s has been approved. Your customer profile is now up to date.", p.getRequestId())
+                : String.format("Your KYC update request #%s was rejected. Reason: %s",
+                        p.getRequestId(),
+                        p.getRejectionReason() != null ? p.getRejectionReason() : "Does not meet verification criteria.");
+
+        Notification notification = Notification.builder()
+                .customerId(customerId)
+                .title(title)
+                .message(message)
+                .channel(NotificationChannel.IN_APP)
+                .isRead(false)
+                .eventId(eventId)
+                .createdAt(event.getTimestamp() != null ? event.getTimestamp() : Instant.now())
+                .build();
+
+        Notification saved = notificationRepository.save(notification);
+        notificationDispatcher.dispatch(saved);
+        log.info("Processed KycRequestEvaluatedEvent [{}] -> Notification [{}] for Customer [{}] (Status: {})",
+                eventId, saved.getId(), customerId, p.getStatus());
     }
 
     @Transactional(readOnly = true)

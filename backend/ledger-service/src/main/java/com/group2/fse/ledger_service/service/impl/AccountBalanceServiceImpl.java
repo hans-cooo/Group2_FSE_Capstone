@@ -12,6 +12,7 @@ import com.group2.fse.ledger_service.entity.Transaction;
 import com.group2.fse.ledger_service.entity.User;
 import com.group2.fse.ledger_service.event.LedgerMutationEvent;
 import com.group2.fse.ledger_service.event.LedgerTransferEvent;
+import com.group2.fse.ledger_service.event.LedgerTransferFailedEvent;
 import com.group2.fse.ledger_service.exception.AccountNotFoundException;
 import com.group2.fse.ledger_service.exception.InsufficientFundsException;
 import com.group2.fse.ledger_service.exception.InvalidTransactionException;
@@ -221,140 +222,162 @@ public class AccountBalanceServiceImpl implements AccountBalanceService {
         Long srcId = request.getSourceAccountId();
         Long dstId = request.getDestinationAccountId();
         BigDecimal amount = request.getAmount();
-
-        if (srcId == null || dstId == null) {
-            throw new InvalidTransactionException("Source and destination account IDs are required.");
-        }
-        if (srcId.equals(dstId)) {
-            throw new InvalidTransactionException("Source and destination accounts must be distinct accounts.");
-        }
-        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new InvalidTransactionException("Transfer amount must be greater than zero.");
-        }
-
-        // Deadlock-free ordered lock acquisition: min(src, dst) then max(src, dst)
-        Long firstId = Math.min(srcId, dstId);
-        Long secondId = Math.max(srcId, dstId);
-
-        Balance firstBalance = balanceRepository.findByAccountId(firstId)
-                .or(() -> balanceRepository.findById(firstId))
-                .orElseThrow(() -> new AccountNotFoundException(firstId));
-
-        Balance secondBalance = balanceRepository.findByAccountId(secondId)
-                .or(() -> balanceRepository.findById(secondId))
-                .orElseThrow(() -> new AccountNotFoundException(secondId));
-
-        Balance sourceBalance = srcId.equals(firstId) ? firstBalance : secondBalance;
-        Balance destinationBalance = dstId.equals(firstId) ? firstBalance : secondBalance;
-
-        BigDecimal srcPrev = sourceBalance.getAvailableBalance();
-        if (srcPrev.compareTo(amount) < 0) {
-            throw new InsufficientFundsException(srcId, srcPrev, amount);
-        }
-
-        BigDecimal srcNew = srcPrev.subtract(amount);
-        BigDecimal dstPrev = destinationBalance.getAvailableBalance();
-        BigDecimal dstNew = dstPrev.add(amount);
-
-        sourceBalance.setAvailableBalance(srcNew);
-        destinationBalance.setAvailableBalance(dstNew);
-        balanceRepository.save(sourceBalance);
-        balanceRepository.save(destinationBalance);
-
         String ref = request.getReferenceNo();
-        String refDebit = ref.length() > 33 ? ref.substring(0, 33) + "-D" : ref + "-D";
-        String refCredit = ref.length() > 33 ? ref.substring(0, 33) + "-C" : ref + "-C";
+        Long srcCustId = null;
 
-        // Oracle Master SoR: Save paired transaction records
-        Account srcAccount = sourceBalance.getAccount() != null ? sourceBalance.getAccount() : Account.builder().accountId(srcId).build();
-        Account dstAccount = destinationBalance.getAccount() != null ? destinationBalance.getAccount() : Account.builder().accountId(dstId).build();
-        User approvedByUser = actorId != null ? User.builder().userId(actorId).build() : null;
+        try {
+            if (srcId == null || dstId == null) {
+                throw new InvalidTransactionException("Source and destination account IDs are required.");
+            }
+            if (srcId.equals(dstId)) {
+                throw new InvalidTransactionException("Source and destination accounts must be distinct accounts.");
+            }
+            if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+                throw new InvalidTransactionException("Transfer amount must be greater than zero.");
+            }
 
-        Transaction debitTxn = Transaction.builder()
-                .account(srcAccount)
-                .referenceNo(refDebit)
-                .transactionType("DEBIT")
-                .amount(amount)
-                .previousBalance(srcPrev)
-                .newBalance(srcNew)
-                .status("COMPLETED")
-                .approvedBy(approvedByUser)
-                .build();
-        Transaction savedDebitTxn = transactionRepository.save(debitTxn);
+            // Deadlock-free ordered lock acquisition: min(src, dst) then max(src, dst)
+            Long firstId = Math.min(srcId, dstId);
+            Long secondId = Math.max(srcId, dstId);
 
-        Transaction creditTxn = Transaction.builder()
-                .account(dstAccount)
-                .referenceNo(refCredit)
-                .transactionType("CREDIT")
-                .amount(amount)
-                .previousBalance(dstPrev)
-                .newBalance(dstNew)
-                .status("COMPLETED")
-                .approvedBy(approvedByUser)
-                .build();
-        Transaction savedCreditTxn = transactionRepository.save(creditTxn);
+            Balance firstBalance = balanceRepository.findByAccountId(firstId)
+                    .or(() -> balanceRepository.findById(firstId))
+                    .orElseThrow(() -> new AccountNotFoundException(firstId));
 
-        // PostgreSQL Forensic Audit Store: Simultaneous dual-write for both legs
-        dualWriteLedgerAuditService.recordMutationAudit(
-                savedDebitTxn.getTransactionId() != null ? savedDebitTxn.getTransactionId() : 0L,
-                srcId, "DEBIT", amount, srcPrev, srcNew, actorId, clientIp
-        );
-        dualWriteLedgerAuditService.recordMutationAudit(
-                savedCreditTxn.getTransactionId() != null ? savedCreditTxn.getTransactionId() : 0L,
-                dstId, "CREDIT", amount, dstPrev, dstNew, actorId, clientIp
-        );
+            Balance secondBalance = balanceRepository.findByAccountId(secondId)
+                    .or(() -> balanceRepository.findById(secondId))
+                    .orElseThrow(() -> new AccountNotFoundException(secondId));
 
-        // Publish domain mutation events for both legs of the transfer
-        publishMutationEvent(
-                savedDebitTxn.getTransactionId() != null ? savedDebitTxn.getTransactionId() : 0L,
-                srcId,
-                srcAccount != null ? srcAccount.getAccountNumber() : null,
-                "DEBIT",
-                amount,
-                srcPrev,
-                srcNew,
-                refDebit,
-                srcAccount != null && srcAccount.getCustomer() != null ? srcAccount.getCustomer().getCustomerId() : null
-        );
-        publishMutationEvent(
-                savedCreditTxn.getTransactionId() != null ? savedCreditTxn.getTransactionId() : 0L,
-                dstId,
-                dstAccount != null ? dstAccount.getAccountNumber() : null,
-                "CREDIT",
-                amount,
-                dstPrev,
-                dstNew,
-                refCredit,
-                dstAccount != null && dstAccount.getCustomer() != null ? dstAccount.getCustomer().getCustomerId() : null
-        );
+            Balance sourceBalance = srcId.equals(firstId) ? firstBalance : secondBalance;
+            Balance destinationBalance = dstId.equals(firstId) ? firstBalance : secondBalance;
 
-        // Publish transfer completed event
-        publishTransferEvent(
-                ref,
-                srcId,
-                dstId,
-                amount,
-                srcPrev,
-                srcNew,
-                dstPrev,
-                dstNew
-        );
+            if (sourceBalance.getAccount() != null && sourceBalance.getAccount().getCustomer() != null) {
+                srcCustId = sourceBalance.getAccount().getCustomer().getCustomerId();
+            }
 
-        log.info("Atomic transfer completed: ref={}, src={} ({} -> {}), dst={} ({} -> {}), amount={}",
-                ref, srcId, srcPrev, srcNew, dstId, dstPrev, dstNew, amount);
+            BigDecimal srcPrev = sourceBalance.getAvailableBalance();
+            if (srcPrev.compareTo(amount) < 0) {
+                throw new InsufficientFundsException(srcId, srcPrev, amount);
+            }
 
-        return TransferResponseDto.builder()
-                .transferReference(ref)
-                .sourceAccountId(srcId)
-                .destinationAccountId(dstId)
-                .amount(amount)
-                .sourcePreviousBalance(srcPrev)
-                .sourceNewBalance(srcNew)
-                .destinationPreviousBalance(dstPrev)
-                .destinationNewBalance(dstNew)
-                .status("COMPLETED")
-                .timestamp(Instant.now())
-                .build();
+            BigDecimal srcNew = srcPrev.subtract(amount);
+            BigDecimal dstPrev = destinationBalance.getAvailableBalance();
+            BigDecimal dstNew = dstPrev.add(amount);
+
+            sourceBalance.setAvailableBalance(srcNew);
+            destinationBalance.setAvailableBalance(dstNew);
+            balanceRepository.save(sourceBalance);
+            balanceRepository.save(destinationBalance);
+
+            String refDebit = ref != null && ref.length() > 33 ? ref.substring(0, 33) + "-D" : (ref != null ? ref + "-D" : null);
+            String refCredit = ref != null && ref.length() > 33 ? ref.substring(0, 33) + "-C" : (ref != null ? ref + "-C" : null);
+
+            // Oracle Master SoR: Save paired transaction records
+            Account srcAccount = sourceBalance.getAccount() != null ? sourceBalance.getAccount() : Account.builder().accountId(srcId).build();
+            Account dstAccount = destinationBalance.getAccount() != null ? destinationBalance.getAccount() : Account.builder().accountId(dstId).build();
+            User approvedByUser = actorId != null ? User.builder().userId(actorId).build() : null;
+
+            Transaction debitTxn = Transaction.builder()
+                    .account(srcAccount)
+                    .referenceNo(refDebit)
+                    .transactionType("DEBIT")
+                    .amount(amount)
+                    .previousBalance(srcPrev)
+                    .newBalance(srcNew)
+                    .status("COMPLETED")
+                    .approvedBy(approvedByUser)
+                    .build();
+            Transaction savedDebitTxn = transactionRepository.save(debitTxn);
+
+            Transaction creditTxn = Transaction.builder()
+                    .account(dstAccount)
+                    .referenceNo(refCredit)
+                    .transactionType("CREDIT")
+                    .amount(amount)
+                    .previousBalance(dstPrev)
+                    .newBalance(dstNew)
+                    .status("COMPLETED")
+                    .approvedBy(approvedByUser)
+                    .build();
+            Transaction savedCreditTxn = transactionRepository.save(creditTxn);
+
+            // PostgreSQL Forensic Audit Store: Simultaneous dual-write for both legs
+            dualWriteLedgerAuditService.recordMutationAudit(
+                    savedDebitTxn.getTransactionId() != null ? savedDebitTxn.getTransactionId() : 0L,
+                    srcId, "DEBIT", amount, srcPrev, srcNew, actorId, clientIp
+            );
+            dualWriteLedgerAuditService.recordMutationAudit(
+                    savedCreditTxn.getTransactionId() != null ? savedCreditTxn.getTransactionId() : 0L,
+                    dstId, "CREDIT", amount, dstPrev, dstNew, actorId, clientIp
+            );
+
+            Long dstCustId = dstAccount != null && dstAccount.getCustomer() != null ? dstAccount.getCustomer().getCustomerId() : null;
+
+            // Publish domain mutation events for both legs of the transfer
+            publishMutationEvent(
+                    savedDebitTxn.getTransactionId() != null ? savedDebitTxn.getTransactionId() : 0L,
+                    srcId,
+                    srcAccount != null ? srcAccount.getAccountNumber() : null,
+                    "DEBIT",
+                    amount,
+                    srcPrev,
+                    srcNew,
+                    refDebit,
+                    srcCustId
+            );
+            publishMutationEvent(
+                    savedCreditTxn.getTransactionId() != null ? savedCreditTxn.getTransactionId() : 0L,
+                    dstId,
+                    dstAccount != null ? dstAccount.getAccountNumber() : null,
+                    "CREDIT",
+                    amount,
+                    dstPrev,
+                    dstNew,
+                    refCredit,
+                    dstCustId
+            );
+
+            // Publish transfer completed event
+            publishTransferEvent(
+                    ref,
+                    srcId,
+                    dstId,
+                    amount,
+                    srcPrev,
+                    srcNew,
+                    dstPrev,
+                    dstNew,
+                    srcCustId,
+                    dstCustId
+            );
+
+            log.info("Atomic transfer completed: ref={}, src={} ({} -> {}), dst={} ({} -> {}), amount={}",
+                    ref, srcId, srcPrev, srcNew, dstId, dstPrev, dstNew, amount);
+
+            return TransferResponseDto.builder()
+                    .transferReference(ref)
+                    .sourceAccountId(srcId)
+                    .destinationAccountId(dstId)
+                    .amount(amount)
+                    .sourcePreviousBalance(srcPrev)
+                    .sourceNewBalance(srcNew)
+                    .destinationPreviousBalance(dstPrev)
+                    .destinationNewBalance(dstNew)
+                    .status("COMPLETED")
+                    .timestamp(Instant.now())
+                    .build();
+        } catch (Exception ex) {
+            publishTransferFailedEvent(
+                    ref != null ? ref : "TRF-FAILED-" + UUID.randomUUID().toString().substring(0, 8),
+                    srcId != null ? srcId : 0L,
+                    dstId != null ? dstId : 0L,
+                    srcCustId,
+                    amount,
+                    ex.getMessage(),
+                    ex.getClass().getSimpleName()
+            );
+            throw ex;
+        }
     }
 
     @Override
@@ -544,7 +567,9 @@ public class AccountBalanceServiceImpl implements AccountBalanceService {
             BigDecimal srcPrev,
             BigDecimal srcNew,
             BigDecimal dstPrev,
-            BigDecimal dstNew) {
+            BigDecimal dstNew,
+            Long srcCustId,
+            Long dstCustId) {
         if (applicationEventPublisher != null) {
             LedgerTransferEvent event = LedgerTransferEvent.builder()
                     .eventId("evt_" + UUID.randomUUID())
@@ -560,10 +585,41 @@ public class AccountBalanceServiceImpl implements AccountBalanceService {
                             .sourceNewBalance(srcNew != null ? srcNew.setScale(4, RoundingMode.HALF_UP) : null)
                             .destinationPreviousBalance(dstPrev != null ? dstPrev.setScale(4, RoundingMode.HALF_UP) : null)
                             .destinationNewBalance(dstNew != null ? dstNew.setScale(4, RoundingMode.HALF_UP) : null)
+                            .sourceCustomerId(srcCustId)
+                            .destinationCustomerId(dstCustId)
                             .build())
                     .build();
             applicationEventPublisher.publishEvent(event);
             log.debug("Enqueued Spring application event LedgerTransferEvent for ref {}", transferReference);
+        }
+    }
+
+    private void publishTransferFailedEvent(
+            String transferReference,
+            Long srcId,
+            Long dstId,
+            Long srcCustId,
+            BigDecimal amount,
+            String failureReason,
+            String errorCode) {
+        if (applicationEventPublisher != null) {
+            LedgerTransferFailedEvent event = LedgerTransferFailedEvent.builder()
+                    .eventId("evt_" + UUID.randomUUID())
+                    .eventType("LEDGER_TRANSFER_FAILED")
+                    .timestamp(Instant.now())
+                    .version("1.0")
+                    .payload(LedgerTransferFailedEvent.FailedTransferPayload.builder()
+                            .transferReference(transferReference)
+                            .sourceAccountId(srcId)
+                            .destinationAccountId(dstId)
+                            .sourceCustomerId(srcCustId)
+                            .amount(amount != null ? amount.setScale(4, RoundingMode.HALF_UP) : null)
+                            .failureReason(failureReason)
+                            .errorCode(errorCode)
+                            .build())
+                    .build();
+            applicationEventPublisher.publishEvent(event);
+            log.info("Published LedgerTransferFailedEvent for ref {}: reason={}", transferReference, failureReason);
         }
     }
 }
