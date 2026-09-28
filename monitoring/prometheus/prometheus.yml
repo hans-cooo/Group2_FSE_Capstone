@@ -1,0 +1,90 @@
+# ==============================================================================
+# Prometheus Configuration for CooBS Core Retail Banking Platform
+# ==============================================================================
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+  scrape_timeout: 4s
+
+rule_files:
+  - "alerts.yml"
+
+scrape_configs:
+  # ----------------------------------------------------------------------------
+  # Prometheus Self-Monitoring
+  # ----------------------------------------------------------------------------
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # ----------------------------------------------------------------------------
+  # 1. API Gateway Edge Ingress & Routing Metrics
+  # ----------------------------------------------------------------------------
+  - job_name: 'api-gateway'
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 5s
+    static_configs:
+      - targets: ['api-gateway:8080']
+        labels:
+          service: 'api-gateway'
+          tier: 'edge'
+
+  # ----------------------------------------------------------------------------
+  # 2. Auth Service (Identity, Token Refresh & MFA)
+  # ----------------------------------------------------------------------------
+  - job_name: 'auth-service'
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 5s
+    static_configs:
+      - targets: ['auth-service:8081']
+        labels:
+          service: 'auth-service'
+          tier: 'core'
+
+  # ----------------------------------------------------------------------------
+  # 3. Account Service (Account Lifecycle & Balance Queries)
+  # ----------------------------------------------------------------------------
+  - job_name: 'account-service'
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 5s
+    static_configs:
+      - targets: ['account-service:8082']
+        labels:
+          service: 'account-service'
+          tier: 'core'
+
+  # ----------------------------------------------------------------------------
+  # 4. Ledger Service (Double-Entry Mutations & Distributed Locks)
+  # ----------------------------------------------------------------------------
+  - job_name: 'ledger-service'
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 5s
+    static_configs:
+      - targets: ['ledger-service:8083']
+        labels:
+          service: 'ledger-service'
+          tier: 'core'
+
+  # ----------------------------------------------------------------------------
+  # 5. Notification Service (Kafka Consumers & In-App Feed)
+  # ----------------------------------------------------------------------------
+  - job_name: 'notification-service'
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 5s
+    static_configs:
+      - targets: ['notification-service:8084']
+        labels:
+          service: 'notification-service'
+          tier: 'async'
+
+  # ----------------------------------------------------------------------------
+  # 6. Audit Service (Forensic Hash Chain & Statement Generation)
+  # ----------------------------------------------------------------------------
+  - job_name: 'audit-service'
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 5s
+    static_configs:
+      - targets: ['audit-service:8085']
+        labels:
+          service: 'audit-service'
+          tier: 'forensic'

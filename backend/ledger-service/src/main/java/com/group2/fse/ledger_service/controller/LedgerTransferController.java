@@ -11,6 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -27,6 +28,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class LedgerTransferController {
 
     private final AccountBalanceService accountBalanceService;
+    private final MeterRegistry meterRegistry;
 
     @PostMapping({"/transfers", "/transfer"})
     public ResponseEntity<TransferResponseDto> transfer(
@@ -34,6 +36,7 @@ public class LedgerTransferController {
             Authentication authentication,
             HttpServletRequest request) {
 
+        meterRegistry.counter("banking.transfers.attempted.total").increment();
         Long actorId = extractActorId(authentication);
         String clientIp = extractClientIp(request);
 
@@ -41,8 +44,14 @@ public class LedgerTransferController {
                 requestDto.getSourceAccountId(), requestDto.getDestinationAccountId(),
                 requestDto.getAmount(), requestDto.getReferenceNo(), actorId);
 
-        TransferResponseDto response = accountBalanceService.executeTransfer(requestDto, actorId, clientIp);
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        try {
+            TransferResponseDto response = accountBalanceService.executeTransfer(requestDto, actorId, clientIp);
+            meterRegistry.counter("banking.transfers.completed.total", "status", "SUCCESS").increment();
+            return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        } catch (Exception ex) {
+            meterRegistry.counter("banking.transfers.failed.total", "exception", ex.getClass().getSimpleName()).increment();
+            throw ex;
+        }
     }
 
     private Long extractActorId(Authentication authentication) {

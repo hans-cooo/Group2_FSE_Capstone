@@ -200,7 +200,26 @@ newman run postman/CooBS_Core_Banking.postman_collection.json \
 
 ---
 
-## 8. Developer Runbook & Direct Database Access
+## 8. Enterprise Observability Tier (Prometheus & Grafana)
+
+The platform includes a pre-configured, production-grade observability stack fulfilling **ADR-09 (Prometheus)** and **ADR-10 (Grafana)**:
+
+- **Grafana Operational Command Center:** [`http://localhost:3001`](http://localhost:3001) (Pre-provisioned dashboard: *CooBS Core Banking — Operational Command Center*)
+- **Prometheus Server & Metrics Console:** [`http://localhost:9090`](http://localhost:9090) (Scrapes all 6 Spring Boot microservices every 5 seconds)
+- **Detailed Runbook & Metric Dictionary:** [`docs/ENTERPRISE_OBSERVABILITY_GUIDE.md`](file:///d:/Fullstack/Capstone-dev/docs/ENTERPRISE_OBSERVABILITY_GUIDE.md)
+
+### Launching Observability Stack:
+```powershell
+# Start Prometheus and Grafana alongside existing core services
+docker compose --profile observability up -d
+
+# Verify container status
+docker compose ps prometheus grafana
+```
+
+---
+
+## 9. Developer Runbook & Direct Database Access
 
 ### Oracle SQLPlus CLI
 ```bash
