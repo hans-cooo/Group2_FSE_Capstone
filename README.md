@@ -1,4 +1,5 @@
 # CooBS Core Retail Banking Platform
+
 ### Enterprise Microservices Architecture & Double-Entry Balance Mutation Engine
 
 CooBS is a cloud-native, enterprise-grade core banking platform engineered for high-concurrency retail financial operations. The system features a double-entry ledger with pessimistic row locking, sub-2ms distributed idempotency guards, event-driven streaming, and a segregated immutable forensic audit store secured by SHA-256 cryptographic hash chaining.
@@ -58,31 +59,33 @@ flowchart TB
 
 ## 2. Infrastructure Inventory & Connection Matrix
 
-| Service / Container | Technology | Host Port | Database / Schema | Auth / User | Purpose |
-|---|---|:---:|---|---|---|
-| **`api-gateway`** | Spring Cloud Gateway | `8080` | N/A | Bearer JWT | Central edge ingress, CORS filtering, path routing, Prometheus actuator metrics |
-| **`auth-service`** | Spring Boot 3.x / Java 21 | `8081` | Oracle `XEPDB1` | Database Auth | Customer registration, staff/customer login, RSA/HMAC JWT tokens, MFA challenges |
-| **`account-service`** | Spring Boot 3.x / Java 21 | `8082` | Oracle `XEPDB1` | Database Auth | Account opening, KYC lifecycle, closure requests, staff/customer account visibility |
-| **`ledger-service`** | Spring Boot 3.x / Java 21 | `8083` | Oracle `XEPDB1` | Database Auth | Atomic double-entry fund transfers, balance mutations, pessimistic row locks |
-| **`notification-service`** | Spring Boot 3.x / Java 21 | `8084` | In-Memory / Kafka | Database Auth | Kafka consumer for debit/credit alerts, in-app notification center |
-| **`audit-service`** | Spring Boot 3.x / Java 21 | `8085` | PostgreSQL `audit_store` | Database Auth | Forensic audit consumer, SHA-256 cryptographic chain verification, statement queries |
-| **`frontend`** | React 19 / TypeScript / Vite | `3000` | N/A | JWT Session | Real-time banking dashboard, persona switcher, transfer engine, audit chain verifier |
-| **`oracle-core-db`** | Oracle Database Free | `1522` / `5501` | `XEPDB1` | `core_user` | Master System of Record (SoR), ACID transactions, table check constraints (`balance >= 0`) |
-| **`postgres-audit-db`** | PostgreSQL 16 Alpine | `5434` | `audit_store` | `postgres` | Segregated immutable audit ledger, append-only trigger protection (`ERRCODE 55000`) |
-| **`redis-cache`** | Redis 7.4 Alpine | `6379` | `db 0` | *(none)* | Sub-2ms distributed idempotency pre-flight locks (`SETNX`) & balance cache |
-| **`kafka-broker`** | Apache Kafka 3.8 (KRaft) | `9092` | *(broker)* | *(plaintext)* | Enterprise event streaming backbone (`transfer-events`, `ledger.mutation.completed.v1`) |
-| **`kafka-ui`** | Provectus Kafka UI | `8088` | `local-cluster` | *(web)* | Visual browser dashboard for topics, messages, offsets, and consumer groups |
+| Service / Container        | Technology                   |    Host Port    | Database / Schema       | Auth / User   | Purpose                                                                                    |
+| -------------------------- | ---------------------------- | :-------------: | ----------------------- | ------------- | ------------------------------------------------------------------------------------------ |
+| **`api-gateway`**          | Spring Cloud Gateway         |     `8080`      | N/A                     | Bearer JWT    | Central edge ingress, CORS filtering, path routing, Prometheus actuator metrics            |
+| **`auth-service`**         | Spring Boot 3.x / Java 21    |     `8081`      | Oracle`XEPDB1`          | Database Auth | Customer registration, staff/customer login, RSA/HMAC JWT tokens, MFA challenges           |
+| **`account-service`**      | Spring Boot 3.x / Java 21    |     `8082`      | Oracle`XEPDB1`          | Database Auth | Account opening, KYC lifecycle, closure requests, staff/customer account visibility        |
+| **`ledger-service`**       | Spring Boot 3.x / Java 21    |     `8083`      | Oracle`XEPDB1`          | Database Auth | Atomic double-entry fund transfers, balance mutations, pessimistic row locks               |
+| **`notification-service`** | Spring Boot 3.x / Java 21    |     `8084`      | In-Memory / Kafka       | Database Auth | Kafka consumer for debit/credit alerts, in-app notification center                         |
+| **`audit-service`**        | Spring Boot 3.x / Java 21    |     `8085`      | PostgreSQL`audit_store` | Database Auth | Forensic audit consumer, SHA-256 cryptographic chain verification, statement queries       |
+| **`frontend`**             | React 19 / TypeScript / Vite |     `3000`      | N/A                     | JWT Session   | Real-time banking dashboard, persona switcher, transfer engine, audit chain verifier       |
+| **`oracle-core-db`**       | Oracle Database Free         | `1522` / `5501` | `XEPDB1`                | `core_user`   | Master System of Record (SoR), ACID transactions, table check constraints (`balance >= 0`) |
+| **`postgres-audit-db`**    | PostgreSQL 16 Alpine         |     `5434`      | `audit_store`           | `postgres`    | Segregated immutable audit ledger, append-only trigger protection (`ERRCODE 55000`)        |
+| **`redis-cache`**          | Redis 7.4 Alpine             |     `6379`      | `db 0`                  | _(none)_      | Sub-2ms distributed idempotency pre-flight locks (`SETNX`) & balance cache                 |
+| **`kafka-broker`**         | Apache Kafka 3.8 (KRaft)     |     `9092`      | _(broker)_              | _(plaintext)_ | Enterprise event streaming backbone (`transfer-events`, `ledger.mutation.completed.v1`)    |
+| **`kafka-ui`**             | Provectus Kafka UI           |     `8088`      | `local-cluster`         | _(web)_       | Visual browser dashboard for topics, messages, offsets, and consumer groups                |
 
 ---
 
 ## 3. Quick Start & Execution
 
 ### Prerequisites
+
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) (v20.10+ with Compose v2) with 4GB+ RAM allocated.
 - [Node.js](https://nodejs.org/) (v20+) for local UI development (optional if using Docker).
 - [Java 21](https://adoptium.net/) & Maven (optional for standalone service development).
 
 ### Option A: Launch Complete Stack (All Microservices + Data Tier)
+
 To launch all 6 Spring Boot microservices, the 4 datastores, Kafka, and Kafka UI in containers:
 
 ```bash
@@ -90,6 +93,7 @@ docker compose --profile app up -d --build
 ```
 
 ### Option B: Launch Data Tier Only (for Local IDE Debugging)
+
 To launch only Oracle, PostgreSQL, Redis, Kafka, and Kafka UI:
 
 ```bash
@@ -97,12 +101,15 @@ docker compose up -d
 ```
 
 ### Accessing the Web Dashboard
+
 Launch the frontend UI:
+
 ```bash
 cd frontend
 npm install
 npm run preview   # Runs on port 3000 (pre-configured proxy to Gateway :8080)
 ```
+
 Open **`http://localhost:3000`** in your browser.
 
 ---
@@ -111,43 +118,54 @@ Open **`http://localhost:3000`** in your browser.
 
 All seed accounts are pre-configured in Oracle Database with default password **`Password123!`**:
 
-| Persona | Role | Username | Password | Default Vault Accounts | Key Permissions |
-|---|---|---|---|---|---|
-| **Retail Customer 1** | `ROLE_CUSTOMER` | `john_doe` | `Password123!` | Account #1 (`ACC_10000001`)<br>Savings: **₱49,625.00** | View own accounts, submit transfers, request account closure |
-| **Retail Customer 2** | `ROLE_CUSTOMER` | `maria_santos` | `Password123!` | Account #2 (`ACC_10000002`)<br>Checking: **₱25,375.00** | View own accounts, receive transfers, request account closure |
-| **Retail Customer 3** | `ROLE_CUSTOMER` | `david_kim` | `Password123!` | Account #3 (`ACC_10000003`)<br>Savings: **₱100,000.00** | View own accounts, submit transfers |
-| **Branch Teller** | `ROLE_TELLER` | `teller_alice` | `Password123!` | *Bank-wide operational scope* | **View all customer accounts**, process counter deposits, assisted transfers, KYC approvals |
-| **Administrator** | `ROLE_ADMIN` | `admin` | `Password123!` | *Global supervisory scope* | **View all accounts**, approve account closures, full cryptographic audit inspection |
+| Persona               | Role            | Username       | Password       | Default Vault Accounts                             | Key Permissions                                                                             |
+| --------------------- | --------------- | -------------- | -------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| **Retail Customer 1** | `ROLE_CUSTOMER` | `john_doe`     | `Password123!` | Account#1 (`ACC_10000001`)Savings: **₱49,625.00**  | View own accounts, submit transfers, request account closure                                |
+| **Retail Customer 2** | `ROLE_CUSTOMER` | `maria_santos` | `Password123!` | Account#2 (`ACC_10000002`)Checking: **₱25,375.00** | View own accounts, receive transfers, request account closure                               |
+| **Retail Customer 3** | `ROLE_CUSTOMER` | `david_kim`    | `Password123!` | Account#3 (`ACC_10000003`)Savings: **₱100,000.00** | View own accounts, submit transfers                                                         |
+| **Branch Teller**     | `ROLE_TELLER`   | `teller_alice` | `Password123!` | _Bank-wide operational scope_                      | **View all customer accounts**, process counter deposits, assisted transfers, KYC approvals |
+| **Administrator**     | `ROLE_ADMIN`    | `admin`        | `Password123!` | _Global supervisory scope_                         | **View all accounts**, approve account closures, full cryptographic audit inspection        |
 
 ---
 
 ## 5. Core Architectural Differentiators
 
 ### A. Atomic Double-Entry Ledger Engine
-Every fund transfer executes zero-sum accounting across debit and credit journal entries within a single database transaction. 
+
+Every fund transfer executes zero-sum accounting across debit and credit journal entries within a single database transaction.
+
 - Overdrafts are physically prevented at both the application layer and database engine level via Oracle table check constraints:
   ```sql
   CONSTRAINT chk_balance_non_negative CHECK (available_balance >= 0)
   ```
 
 ### B. Strict Concurrency & Pessimistic Row Locking
+
 To eliminate lost updates and race conditions during high-frequency balance mutations, `ledger-service` executes deterministic account locking:
+
 ```sql
 SELECT available_balance FROM BALANCE WHERE account_id = :id FOR UPDATE
 ```
+
 Accounts are ordered by ID before acquisition to guarantee deadlock-free execution.
 
 ### C. Sub-2ms Distributed Idempotency Guard (Redis Mutex)
+
 To protect against network retries and replay attacks, `ledger-service` enforces a multi-tier idempotency pipeline:
+
 1. **Pre-flight Lock**: Redis atomic `SET key value NX EX 120` acquires a 120-second lease within 2ms.
 2. **Payload Checksum**: Compares payload SHA-256 hash against previously executed requests.
 3. **Cached Replay**: Duplicate submissions return the original transaction response (`X-Cache: HIT`) without debiting accounts twice.
 
 ### D. Segregated Cryptographic Audit Ledger (SHA-256)
+
 Audit data is segregated from the operational database to guarantee non-repudiation:
+
 - Events stream asynchronously through Kafka to `audit-service`.
 - Saved in PostgreSQL `audit_store.ledger_mutation_audit` with cryptographic hash chaining:
-  $$\text{Current Hash} = \text{SHA256}(\text{Previous Hash} + \text{Account ID} + \text{Txn ID} + \text{Type} + \text{Amount} + \text{New Balance} + \text{Timestamp})$$
+  $$
+  \text{Current Hash} = \text{SHA256}(\text{Previous Hash} + \text{Account ID} + \text{Txn ID} + \text{Type} + \text{Amount} + \text{New Balance} + \text{Timestamp})
+  $$
 - The table is locked with an append-only trigger that aborts `UPDATE` and `DELETE` queries with SQL code `ERRCODE 55000`.
 - The UI features a real-time verification engine verifying hundreds of historical mutations in milliseconds.
 
@@ -158,16 +176,19 @@ Audit data is segregated from the operational database to guarantee non-repudiat
 A comprehensive automated test suite validates the entire 7-tier architecture against the live API Gateway:
 
 ### Run in PowerShell:
+
 ```powershell
 .\scripts\demo_golden_path.ps1
 ```
 
 ### Run in Python (Cross-Platform):
+
 ```bash
 python ./scripts/demo_golden_path.py
 ```
 
 ### Verification Pipeline:
+
 1. **API Gateway Health & Route Discovery**: Verifies `/actuator/health` and dynamic service routes.
 2. **Customer Registration & JWT Provisioning**: Registers a new customer and acquires an HMAC-signed Bearer JWT.
 3. **Account Lifecycle Inspection**: Verifies account retrieval through `account-service`.
@@ -184,11 +205,11 @@ The repository provides two test execution methods for validating platform relia
 
 ### Available Test Suites & What They Do
 
-| Test Suite | PowerShell Script | Postman Collection JSON | Key Validations & Invariants Covered |
-| :--- | :--- | :--- | :--- |
-| **CooBS Core Banking API** | [`scripts/test_api_endpoints.ps1`](scripts/test_api_endpoints.ps1) | [`postman/CooBS_Core_Banking.postman_collection.json`](postman/CooBS_Core_Banking.postman_collection.json) | **13-Point Platform Operational Health & Transfer Flow**:<br>• Gateway health check (`/actuator/health`) and dynamic route discovery.<br>• Customer & Staff (Admin/Teller) JWT token authentication and claim extraction.<br>• Account discovery & Redis-cached balance lookups.<br>• Atomic double-entry transfer execution with balance mutation.<br>• Sub-2ms Redis mutex idempotency replay verification.<br>• Overdraft invariant guard (`HTTP 422 INSUFFICIENT_FUNDS`).<br>• Kafka event-driven notification dispatch & consumption.<br>• PostgreSQL audit statement retrieval and SHA-256 cryptographic chain verification. |
-| **User Lifecycle Flow** | [`scripts/test_user_lifecycle_flow.ps1`](scripts/test_user_lifecycle_flow.ps1) | [`postman/User_Lifecycle_Flow.postman_collection.json`](postman/User_Lifecycle_Flow.postman_collection.json) | **8-Stage End-to-End Customer Lifecycle Journey**:<br>1. Register brand-new customer with dynamic credentials.<br>2. Customer login and JWT bearer acquisition.<br>3. Customer submits initial KYC identity verification.<br>4. Teller login (`teller_alice`) & savings account provisioning.<br>5. Customer submits KYC change/update request.<br>6. Admin login (`admin`) & approval of KYC update.<br>7. Customer submits account closure request.<br>8. Admin approves account closure & transitions status to `CLOSED`. |
-| **Edge Cases & Compliance** | [`scripts/test_edge_cases_and_compliance.ps1`](scripts/test_edge_cases_and_compliance.ps1) | [`postman/CooBS_Edge_Cases_And_Compliance.postman_collection.json`](postman/CooBS_Edge_Cases_And_Compliance.postman_collection.json) | **14 Negative-Testing, Invariant Guard & Rejection Workflows**:<br>• **RBAC Security Guard**: Customers attempting to access staff endpoints are blocked (`HTTP 403 Forbidden`).<br>• **Token Blacklist**: Token revocation (`POST /token/revoke`) and immediate reuse blocked via Redis (`HTTP 401 Unauthorized`).<br>• **Transfer Invariants**: Self-transfer rejected (`HTTP 400`), missing `Idempotency-Key` rejected (`HTTP 400`), non-positive/zero amount rejected (`HTTP 400`), non-existent account rejected (`HTTP 404`).<br>• **Compliance Guard**: Non-zero balance account closure rejected (`HTTP 400`).<br>• **Account Status Controls**: Freezing and unfreezing accounts (`FROZEN` <-> `ACTIVE`).<br>• **Risk Controls**: Imposing risk flags/holds on accounts and lifting them.<br>• **Administrative Rejections**: KYC update request rejected (`REJECTED`) and account closure rejected (`REJECTED`) with audit reasons.<br>• **Notification State**: Marking in-app notification as read (`PATCH /read`). |
+| Test Suite                  | PowerShell Script                                                                          | Postman Collection JSON                                                                                                              | Key Validations & Invariants Covered                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| :-------------------------- | :----------------------------------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **CooBS Core Banking API**  | [`scripts/test_api_endpoints.ps1`](scripts/test_api_endpoints.ps1)                         | [`postman/CooBS_Core_Banking.postman_collection.json`](postman/CooBS_Core_Banking.postman_collection.json)                           | **13-Point Platform Operational Health & Transfer Flow**:• Gateway health check (`/actuator/health`) and dynamic route discovery.• Customer & Staff (Admin/Teller) JWT token authentication and claim extraction.• Account discovery & Redis-cached balance lookups.• Atomic double-entry transfer execution with balance mutation.• Sub-2ms Redis mutex idempotency replay verification.• Overdraft invariant guard (`HTTP 422 INSUFFICIENT_FUNDS`).• Kafka event-driven notification dispatch & consumption.• PostgreSQL audit statement retrieval and SHA-256 cryptographic chain verification.                                                                                                                                                                                                                                                                                                                                                                                              |
+| **User Lifecycle Flow**     | [`scripts/test_user_lifecycle_flow.ps1`](scripts/test_user_lifecycle_flow.ps1)             | [`postman/User_Lifecycle_Flow.postman_collection.json`](postman/User_Lifecycle_Flow.postman_collection.json)                         | **8-Stage End-to-End Customer Lifecycle Journey**:1. Register brand-new customer with dynamic credentials.2. Customer login and JWT bearer acquisition.3. Customer submits initial KYC identity verification.4. Teller login (`teller_alice`) & savings account provisioning.5. Customer submits KYC change/update request.6. Admin login (`admin`) & approval of KYC update.7. Customer submits account closure request.8. Admin approves account closure & transitions status to `CLOSED`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| **Edge Cases & Compliance** | [`scripts/test_edge_cases_and_compliance.ps1`](scripts/test_edge_cases_and_compliance.ps1) | [`postman/CooBS_Edge_Cases_And_Compliance.postman_collection.json`](postman/CooBS_Edge_Cases_And_Compliance.postman_collection.json) | **14 Negative-Testing, Invariant Guard & Rejection Workflows**:• **RBAC Security Guard**: Customers attempting to access staff endpoints are blocked (`HTTP 403 Forbidden`).• **Token Blacklist**: Token revocation (`POST /token/revoke`) and immediate reuse blocked via Redis (`HTTP 401 Unauthorized`).• **Transfer Invariants**: Self-transfer rejected (`HTTP 400`), missing `Idempotency-Key` rejected (`HTTP 400`), non-positive/zero amount rejected (`HTTP 400`), non-existent account rejected (`HTTP 404`).• **Compliance Guard**: Non-zero balance account closure rejected (`HTTP 400`).• **Account Status Controls**: Freezing and unfreezing accounts (`FROZEN` <-> `ACTIVE`).• **Risk Controls**: Imposing risk flags/holds on accounts and lifting them.• **Administrative Rejections**: KYC update request rejected (`REJECTED`) and account closure rejected (`REJECTED`) with audit reasons.• **Notification State**: Marking in-app notification as read (`PATCH /read`). |
 
 ---
 
@@ -197,26 +218,30 @@ The repository provides two test execution methods for validating platform relia
 You can execute each test suite individually or run all three consecutively from the workspace root in PowerShell:
 
 #### 1. CooBS Core Banking API Test Suite:
+
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/test_api_endpoints.ps1
 ```
 
 #### 2. User Lifecycle Flow Test Suite:
+
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/test_user_lifecycle_flow.ps1
 ```
 
 #### 3. Edge Cases & Compliance Guard Test Suite:
+
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/test_edge_cases_and_compliance.ps1
 ```
 
 #### Run All 3 Suites Sequentially:
+
 ```powershell
 powershell -ExecutionPolicy Bypass -Command "& 'scripts/test_api_endpoints.ps1'; & 'scripts/test_user_lifecycle_flow.ps1'; & 'scripts/test_edge_cases_and_compliance.ps1'"
 ```
 
-*(Note: Pass `-GatewayUrl http://<host>:<port>` if targeting an environment other than default `http://localhost:8080`.)*
+_(Note: Pass `-GatewayUrl http://<host>:<port>` if targeting an environment other than default `http://localhost:8080`.)_
 
 ---
 
@@ -242,6 +267,7 @@ newman run postman/CooBS_Edge_Cases_And_Compliance.postman_collection.json \
 ```
 
 ### Running via Postman Desktop:
+
 1. Import the desired collection JSON files from [`postman/`](postman) into Postman.
 2. Import the environment file [`postman/CooBS_Local.postman_environment.json`](postman/CooBS_Local.postman_environment.json).
 3. Select the `CooBS Local (Docker Gateway)` environment in Postman.
@@ -253,11 +279,12 @@ newman run postman/CooBS_Edge_Cases_And_Compliance.postman_collection.json \
 
 The platform includes a pre-configured, production-grade observability stack fulfilling **ADR-09 (Prometheus)** and **ADR-10 (Grafana)**:
 
-- **Grafana Operational Command Center:** [`http://localhost:3001`](http://localhost:3001) (Pre-provisioned dashboard: *CooBS Core Banking — Operational Command Center*)
+- **Grafana Operational Command Center:** [`http://localhost:3001`](http://localhost:3001) (Pre-provisioned dashboard: _CooBS Core Banking — Operational Command Center_)
 - **Prometheus Server & Metrics Console:** [`http://localhost:9090`](http://localhost:9090) (Scrapes all 6 Spring Boot microservices every 5 seconds)
 - **Detailed Runbook & Metric Dictionary:** [`docs/ENTERPRISE_OBSERVABILITY_GUIDE.md`](file:///d:/Fullstack/Capstone-dev/docs/ENTERPRISE_OBSERVABILITY_GUIDE.md)
 
 ### Launching Observability Stack:
+
 ```powershell
 # Start Prometheus and Grafana alongside existing core services
 docker compose --profile observability up -d
@@ -271,21 +298,25 @@ docker compose ps prometheus grafana
 ## 9. Developer Runbook & Direct Database Access
 
 ### Oracle SQLPlus CLI
+
 ```bash
 docker exec -it oracle-core-db bash -c 'sqlplus "${APP_USER}/${APP_USER_PASSWORD}@localhost:1521/${ORACLE_DATABASE}"'
 ```
 
 ### PostgreSQL PSQL CLI
+
 ```bash
 docker exec -it postgres-audit-db psql -U postgres -d audit_store
 ```
 
 ### Redis CLI
+
 ```bash
 docker exec -it redis-cache redis-cli
 ```
 
 ### Kafka Event Consumer
+
 ```bash
 docker exec -it kafka-broker /opt/kafka/bin/kafka-console-consumer.sh \
   --bootstrap-server localhost:9092 \
@@ -294,6 +325,7 @@ docker exec -it kafka-broker /opt/kafka/bin/kafka-console-consumer.sh \
 ```
 
 ### System Health & Diagnostics
+
 ```powershell
 # Verify container health and port bindings
 docker compose ps
