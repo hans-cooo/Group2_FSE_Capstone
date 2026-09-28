@@ -12,8 +12,8 @@ import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
 import org.springframework.kafka.listener.DefaultErrorHandler;
-import org.springframework.kafka.support.serializer.ErrorHandlingDeserializer;
-import org.springframework.kafka.support.serializer.JsonDeserializer;
+import org.springframework.kafka.support.converter.RecordMessageConverter;
+import org.springframework.kafka.support.converter.StringJsonMessageConverter;
 import org.springframework.util.backoff.FixedBackOff;
 
 import java.util.HashMap;
@@ -21,9 +21,9 @@ import java.util.Map;
 
 /**
  * Task: FSE-601
- * Apache Kafka consumer infrastructure configuration.
- * Configures ConsumerFactory, ConcurrentKafkaListenerContainerFactory,
- * and DefaultErrorHandler with backoff retry policy.
+ * Apache Kafka consumer infrastructure configuration for In-App Notifications.
+ * Configures ConsumerFactory with StringJsonMessageConverter to seamlessly
+ * convert JSON payloads into domain events across microservices.
  */
 @Slf4j
 @EnableKafka
@@ -47,26 +47,25 @@ public class KafkaConsumerConfig {
         ObjectMapper mapper = new ObjectMapper();
         mapper.registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
         mapper.disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        mapper.configure(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
         return mapper;
     }
 
     @Bean
-    public ConsumerFactory<String, Object> consumerFactory(ObjectMapper objectMapper) {
+    public RecordMessageConverter recordMessageConverter(ObjectMapper objectMapper) {
+        return new StringJsonMessageConverter(objectMapper);
+    }
+
+    @Bean
+    public ConsumerFactory<String, String> consumerFactory() {
         Map<String, Object> props = new HashMap<>();
         props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
         props.put(ConsumerConfig.GROUP_ID_CONFIG, groupId);
         props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, autoOffsetReset);
         props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
-        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ErrorHandlingDeserializer.class);
+        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
 
-        JsonDeserializer<Object> jsonDeserializer = new JsonDeserializer<>(objectMapper);
-        jsonDeserializer.addTrustedPackages("*");
-
-        return new DefaultKafkaConsumerFactory<>(
-                props,
-                new StringDeserializer(),
-                new ErrorHandlingDeserializer<>(jsonDeserializer)
-        );
+        return new DefaultKafkaConsumerFactory<>(props);
     }
 
     @Bean
@@ -82,14 +81,16 @@ public class KafkaConsumerConfig {
     }
 
     @Bean
-    public ConcurrentKafkaListenerContainerFactory<String, Object> kafkaListenerContainerFactory(
-            ConsumerFactory<String, Object> consumerFactory,
-            DefaultErrorHandler defaultErrorHandler) {
+    public ConcurrentKafkaListenerContainerFactory<String, String> kafkaListenerContainerFactory(
+            ConsumerFactory<String, String> consumerFactory,
+            DefaultErrorHandler defaultErrorHandler,
+            RecordMessageConverter recordMessageConverter) {
 
-        ConcurrentKafkaListenerContainerFactory<String, Object> factory =
+        ConcurrentKafkaListenerContainerFactory<String, String> factory =
                 new ConcurrentKafkaListenerContainerFactory<>();
         factory.setConsumerFactory(consumerFactory);
         factory.setCommonErrorHandler(defaultErrorHandler);
+        factory.setRecordMessageConverter(recordMessageConverter);
         factory.setAutoStartup(autoStartup);
         return factory;
     }

@@ -84,6 +84,7 @@ class NotificationServiceTest {
         assertThat(saved.getTitle()).isEqualTo("Account Debited");
         assertThat(saved.getMessage()).contains("PHP 2500.0000 was debited from account ACC_10000001");
         assertThat(saved.isRead()).isFalse();
+        assertThat(saved.getChannel()).isEqualTo(NotificationChannel.IN_APP);
         assertThat(saved.getEventId()).isEqualTo("evt_12345");
 
         verify(notificationDispatcher).dispatch(any(Notification.class));
@@ -139,7 +140,7 @@ class NotificationServiceTest {
                 .customerId(101L)
                 .title("Account Debited")
                 .message("Test message")
-                .channel(NotificationChannel.PUSH)
+                .channel(NotificationChannel.IN_APP)
                 .isRead(false)
                 .createdAt(Instant.now())
                 .build();

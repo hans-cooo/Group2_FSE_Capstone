@@ -8,8 +8,9 @@ import org.springframework.stereotype.Service;
 
 /**
  * Task: FSE-601
- * Multi-channel alert dispatcher (PUSH, SMS, EMAIL, IN_APP).
- * Guaranteed fallback to formatted console banners for live evaluations and testing.
+ * In-App Notification Dispatcher.
+ * SMS and Email channels are retired / out of scope.
+ * Delivers customer in-app notifications and prints real-time terminal audit banners.
  */
 @Slf4j
 @Service
@@ -21,38 +22,13 @@ public class NotificationDispatcher {
             return;
         }
 
-        NotificationChannel channel = notification.getChannel() != null 
-                ? notification.getChannel() 
-                : NotificationChannel.IN_APP;
-
-        switch (channel) {
-            case SMS -> dispatchSms(notification);
-            case EMAIL -> dispatchEmail(notification);
-            case PUSH -> dispatchPush(notification);
-            case IN_APP -> dispatchInApp(notification);
-        }
-
+        dispatchInApp(notification);
         logTerminalBanner(notification);
     }
 
-    private void dispatchSms(Notification notification) {
-        log.info("[SMS GATEWAY] Sending SMS to Customer [{}]: Title='{}' Body='{}'",
-                notification.getCustomerId(), notification.getTitle(), notification.getMessage());
-    }
-
-    private void dispatchEmail(Notification notification) {
-        log.info("[EMAIL GATEWAY] Sending Email to Customer [{}]: Subject='{}' Content='{}'",
-                notification.getCustomerId(), notification.getTitle(), notification.getMessage());
-    }
-
-    private void dispatchPush(Notification notification) {
-        log.info("[PUSH GATEWAY] Pushing alert to Customer [{}] Device: Title='{}' Payload='{}'",
-                notification.getCustomerId(), notification.getTitle(), notification.getMessage());
-    }
-
     private void dispatchInApp(Notification notification) {
-        log.info("[IN-APP FEED] Stored in-app notification for Customer [{}]: ID={}",
-                notification.getCustomerId(), notification.getId());
+        log.info("[IN-APP FEED] Stored in-app notification for Customer [{}]: ID={}, Title='{}'",
+                notification.getCustomerId(), notification.getId(), notification.getTitle());
     }
 
     private void logTerminalBanner(Notification n) {
@@ -60,7 +36,7 @@ public class NotificationDispatcher {
                 """
                 
                 ========================================================================================
-                ?? [NOTIFICATION SERVICE DISPATCHED ALERT]
+                🔔 [IN-APP NOTIFICATION SERVICE DISPATCHED ALERT]
                 Channel:     [%s]
                 Customer ID: [%s]
                 Event ID:    [%s]
@@ -69,7 +45,7 @@ public class NotificationDispatcher {
                 Timestamp:   [%s]
                 ========================================================================================
                 """,
-                n.getChannel(),
+                n.getChannel() != null ? n.getChannel() : NotificationChannel.IN_APP,
                 n.getCustomerId(),
                 n.getEventId() != null ? n.getEventId() : "N/A",
                 n.getTitle(),

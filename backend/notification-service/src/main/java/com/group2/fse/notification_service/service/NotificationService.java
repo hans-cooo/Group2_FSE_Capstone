@@ -59,7 +59,7 @@ public class NotificationService {
                 .customerId(customerId)
                 .title(title)
                 .message(message)
-                .channel(NotificationChannel.PUSH)
+                .channel(NotificationChannel.IN_APP)
                 .isRead(false)
                 .eventId(eventId)
                 .createdAt(event.getTimestamp() != null ? event.getTimestamp() : Instant.now())
@@ -94,7 +94,7 @@ public class NotificationService {
                     .title("Funds Transfer Sent")
                     .message(String.format("PHP %s was transferred to account %s. Reference: %s. New balance: PHP %s.",
                             p.getAmount(), p.getDestinationAccountId(), p.getTransferReference(), p.getSourceNewBalance()))
-                    .channel(NotificationChannel.PUSH)
+                    .channel(NotificationChannel.IN_APP)
                     .isRead(false)
                     .eventId(eventId != null ? eventId + "_SRC" : null)
                     .createdAt(event.getTimestamp() != null ? event.getTimestamp() : Instant.now())
@@ -112,7 +112,7 @@ public class NotificationService {
                     .title("Funds Transfer Received")
                     .message(String.format("PHP %s was received from account %s. Reference: %s. New balance: PHP %s.",
                             p.getAmount(), p.getSourceAccountId(), p.getTransferReference(), p.getDestinationNewBalance()))
-                    .channel(NotificationChannel.PUSH)
+                    .channel(NotificationChannel.IN_APP)
                     .isRead(false)
                     .eventId(eventId != null ? eventId + "_DEST" : null)
                     .createdAt(event.getTimestamp() != null ? event.getTimestamp() : Instant.now())
@@ -144,7 +144,7 @@ public class NotificationService {
                 .title("Account Closed")
                 .message(String.format("Account %s closure request #%s has been finalized. Final balance: PHP %s.",
                         p.getAccountNumber(), p.getClosureRequestId(), p.getFinalBalance()))
-                .channel(NotificationChannel.EMAIL)
+                .channel(NotificationChannel.IN_APP)
                 .isRead(false)
                 .eventId(eventId)
                 .createdAt(event.getTimestamp() != null ? event.getTimestamp() : Instant.now())
