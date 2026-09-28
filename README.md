@@ -178,7 +178,29 @@ python ./scripts/demo_golden_path.py
 
 ---
 
-## 7. Developer Runbook & Direct Database Access
+## 7. Postman Test Suite & Newman Automated Testing
+
+A complete enterprise-grade Postman collection and environment suite is included in [`postman/`](file:///d:/Fullstack/Capstone-dev/postman):
+
+- **Collection:** [`postman/CooBS_Core_Banking.postman_collection.json`](file:///d:/Fullstack/Capstone-dev/postman/CooBS_Core_Banking.postman_collection.json) (25 test cases across 6 folders)
+- **Environment:** [`postman/CooBS_Local.postman_environment.json`](file:///d:/Fullstack/Capstone-dev/postman/CooBS_Local.postman_environment.json)
+- **Comprehensive Guide:** [`docs/POSTMAN_TEST_SUITE_GUIDE.md`](file:///d:/Fullstack/Capstone-dev/docs/POSTMAN_TEST_SUITE_GUIDE.md)
+
+### Running via Postman Desktop:
+1. Import both JSON files into Postman.
+2. Select the `CooBS Local (Docker Gateway)` environment.
+3. Run the collection to verify all 25 assertions with real-time token capture and dynamic balance checks.
+
+### Running via Newman CLI (Automated CI/CD):
+```bash
+newman run postman/CooBS_Core_Banking.postman_collection.json \
+  -e postman/CooBS_Local.postman_environment.json \
+  --delay-request 100
+```
+
+---
+
+## 8. Developer Runbook & Direct Database Access
 
 ### Oracle SQLPlus CLI
 ```bash
