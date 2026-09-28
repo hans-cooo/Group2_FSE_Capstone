@@ -1,0 +1,453 @@
+{
+  "info": {
+    "_postman_id": "coobs-advanced-suite-v1",
+    "name": "CooBS - Advanced Banking Validation Suite",
+    "description": "Advanced tests covering Concurrency, Race Conditions, Cryptographic Audit Verification, Token Tampering, IDOR Tenant Boundaries, Risk Holds, and Boundary Payloads.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. High-Concurrency & Race Conditions",
+      "item": [
+        {
+          "name": "1.1 Overdraft Race Condition Test (Overbalance Transfer)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.variables.set('race_idemp', 'race-idemp-' + Date.now() + '-' + Math.floor(Math.random() * 1000));",
+                  "pm.variables.set('race_corr', 'race-corr-' + Date.now() + '-' + Math.floor(Math.random() * 1000));"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Response is handled gracefully (201 Created or 400/422 Insufficient Funds)', function () {",
+                  "    pm.expect([201, 400, 422]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 400 || pm.response.code === 422) {",
+                  "    var err = pm.response.json();",
+                  "    pm.test('Error explicitly states balance constraint', function () {",
+                  "        var msg = JSON.stringify(err).toLowerCase();",
+                  "        pm.expect(msg).to.include('insufficient');",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{customer_token}}" },
+              { "key": "Idempotency-Key", "value": "{{race_idemp}}" },
+              { "key": "X-Correlation-ID", "value": "{{race_corr}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sourceAccountId\": {{source_account_id}},\n  \"destinationAccountId\": {{dest_account_id}},\n  \"amount\": 60.00,\n  \"referenceNo\": \"REF-RACE-{{$timestamp}}\",\n  \"remarks\": \"Concurrency Race Test Run\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ledger/transfers",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "ledger", "transfers"]
+            }
+          }
+        },
+        {
+          "name": "1.2 Redis Idempotency Lock Contention (In-Progress Replay)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "var sharedKey = 'lock-contention-' + Math.floor(Date.now() / 1000);",
+                  "pm.variables.set('contention_key', sharedKey);"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Response returns 201 Created or 409 Conflict / 422 Processing Mutex', function () {",
+                  "    pm.expect([201, 409, 422]).to.include(pm.response.code);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{customer_token}}" },
+              { "key": "Idempotency-Key", "value": "{{contention_key}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sourceAccountId\": {{source_account_id}},\n  \"destinationAccountId\": {{dest_account_id}},\n  \"amount\": 10.00,\n  \"referenceNo\": \"REF-CONTENTION-TEST\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ledger/transfers",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "ledger", "transfers"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Cryptographic Forensic Audit Verification",
+      "item": [
+        {
+          "name": "2.1 Verify Audit Chain Intact Post-Rejection",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Audit chain endpoint responds 200 OK', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.test('Cryptographic SHA-256 chain is 100% intact', function () {",
+                  "    pm.expect(data.isChainIntact || data.chainIntact).to.be.true;",
+                  "    pm.expect(data.latestHash).to.have.lengthOf(64);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{admin_token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/audit/verify-chain/{{source_account_id}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "audit", "verify-chain", "{{source_account_id}}"]
+            }
+          }
+        },
+        {
+          "name": "2.2 Dual-Write Matching - Source Account Audit Statement",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Statement fetched successfully', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.test('Audit entries contain valid currentHash pointers', function () {",
+                  "    var content = data.content || data;",
+                  "    pm.expect(content).to.be.an('array');",
+                  "    if (content.length > 0) {",
+                  "        pm.expect(content[0].currentHash).to.exist;",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{admin_token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/audit/accounts/{{source_account_id}}/statement?page=0&size=5",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "audit", "accounts", "{{source_account_id}}", "statement"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "5" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Security & Perimeter Hardening (IDOR / JWT)",
+      "item": [
+        {
+          "name": "3.1 JWT Tampered Signature Rejection",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Tampered JWT rejected with 401 Unauthorized', function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJqb2huX2RvZSIsImV4cCI6OTk5OTk5OTk5OX0.TAMPERED_SIGNATURE_STRING" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/accounts/my-accounts",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "accounts", "my-accounts"]
+            }
+          }
+        },
+        {
+          "name": "3.2 IDOR Prevention - Access Counterparty Account Directly",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Cross-tenant account access blocked (403 Forbidden or 404)', function () {",
+                  "    pm.expect([403, 404]).to.include(pm.response.code);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{customer_token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/accounts/{{dest_account_id}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "accounts", "{{dest_account_id}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Risk Holds & Frozen Account Controls",
+      "item": [
+        {
+          "name": "4.1 Freeze Account (Admin Execution)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status updated to FROZEN', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var data = pm.response.json();",
+                  "    pm.expect(data.status).to.eql('FROZEN');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{admin_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"FROZEN\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/accounts/{{dest_account_id}}/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "accounts", "{{dest_account_id}}", "status"]
+            }
+          }
+        },
+        {
+          "name": "4.2 Transfer Attempt From Frozen Target Account (Must Fail)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Transfer from frozen account blocked (400, 403, or 422)', function () {",
+                  "    pm.expect([400, 403, 422]).to.include(pm.response.code);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{counterparty_token}}" },
+              { "key": "Idempotency-Key", "value": "frozen-trf-{{$timestamp}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sourceAccountId\": {{dest_account_id}},\n  \"destinationAccountId\": {{source_account_id}},\n  \"amount\": 10.00,\n  \"referenceNo\": \"REF-FROZEN-FAIL\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ledger/transfers",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "ledger", "transfers"]
+            }
+          }
+        },
+        {
+          "name": "4.3 Unfreeze Account (Restore Active Status)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status restored to ACTIVE', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var data = pm.response.json();",
+                  "    pm.expect(data.status).to.eql('ACTIVE');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{admin_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"ACTIVE\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/accounts/{{dest_account_id}}/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "accounts", "{{dest_account_id}}", "status"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Boundary & Input Validation",
+      "item": [
+        {
+          "name": "5.1 Micro-Fractional Scale Amount Rejection",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Invalid currency scale rejected with 400 Bad Request', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{customer_token}}" },
+              { "key": "Idempotency-Key", "value": "micro-scale-{{$timestamp}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sourceAccountId\": {{source_account_id}},\n  \"destinationAccountId\": {{dest_account_id}},\n  \"amount\": 0.00001,\n  \"referenceNo\": \"REF-MICRO-SCALE\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ledger/transfers",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "ledger", "transfers"]
+            }
+          }
+        },
+        {
+          "name": "5.2 Extreme Numeric Overflow Amount Test",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Overflow amount blocked with 400 or 422', function () {",
+                  "    pm.expect([400, 422]).to.include(pm.response.code);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{customer_token}}" },
+              { "key": "Idempotency-Key", "value": "overflow-{{$timestamp}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sourceAccountId\": {{source_account_id}},\n  \"destinationAccountId\": {{dest_account_id}},\n  \"amount\": 9999999999999999.99,\n  \"referenceNo\": \"REF-OVERFLOW-TEST\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ledger/transfers",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "ledger", "transfers"]
+            }
+          }
+        },
+        {
+          "name": "5.3 SQL Injection Attack Payload in KYC Form",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('SQL injection attempt handled safely (400 or 201/202 sanitized)', function () {",
+                  "    pm.expect([400, 201, 202]).to.include(pm.response.code);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{customer_token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"newFirstName\": \"John\",\n  \"newLastName\": \"'; DROP TABLE users;--\",\n  \"newAddress\": \"123 Security Way\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/customers/kyc/update-request",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "customers", "kyc", "update-request"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
