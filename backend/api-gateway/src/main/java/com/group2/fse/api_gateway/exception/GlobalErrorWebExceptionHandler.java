@@ -56,7 +56,11 @@ public class GlobalErrorWebExceptionHandler implements ErrorWebExceptionHandler 
         if (ex instanceof ResponseStatusException rse) {
             status = HttpStatus.valueOf(rse.getStatusCode().value());
             title = status.getReasonPhrase();
-            detail = rse.getReason() != null ? rse.getReason() : ex.getMessage();
+            if (status == HttpStatus.TOO_MANY_REQUESTS) {
+                detail = "Rate limit exceeded. Too many requests. Please retry after some time.";
+            } else {
+                detail = rse.getReason() != null ? rse.getReason() : ex.getMessage();
+            }
         } else if (ex instanceof ConnectException || (ex.getCause() != null && ex.getCause() instanceof ConnectException)) {
             status = HttpStatus.SERVICE_UNAVAILABLE;
             title = "Downstream Service Unavailable";

@@ -4,8 +4,16 @@ server:
 spring:
   application:
     name: api-gateway
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 2000ms
   cloud:
     gateway:
+      filter:
+        request-rate-limiter:
+          deny-empty-key: false
       globalcors:
         cors-configurations:
           '[/**]':
@@ -28,43 +36,94 @@ spring:
               - "Idempotency-Key"
               - "Content-Disposition"
               - "Location"
+              - "X-RateLimit-Remaining"
+              - "X-RateLimit-Burst-Capacity"
+              - "X-RateLimit-Replenish-Rate"
+              - "X-RateLimit-Requested-Tokens"
             allowCredentials: true
             maxAge: 3600
       routes:
         # 1. Auth Service Routes (Identity, Registration, MFA, Token Refresh)
+        # Strictest limits: 10 req/s, burst 20 to protect against credential brute forcing
         - id: auth-service-route
           uri: ${AUTH_SERVICE_URL:http://localhost:8081}
           predicates:
             - Path=/api/v1/auth/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 10
+                redis-rate-limiter.burstCapacity: 20
+                redis-rate-limiter.requestedTokens: 1
+                key-resolver: "#{@ipKeyResolver}"
 
         # 2. Account Service Routes (Customers & Accounts Lifecycle)
+        # Operational query limits: 50 req/s, burst 100
         - id: account-service-accounts-route
           uri: ${ACCOUNT_SERVICE_URL:http://localhost:8082}
           predicates:
             - Path=/api/v1/accounts/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 50
+                redis-rate-limiter.burstCapacity: 100
+                redis-rate-limiter.requestedTokens: 1
+                key-resolver: "#{@userOrIpKeyResolver}"
 
         - id: account-service-customers-route
           uri: ${ACCOUNT_SERVICE_URL:http://localhost:8082}
           predicates:
             - Path=/api/v1/customers/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 50
+                redis-rate-limiter.burstCapacity: 100
+                redis-rate-limiter.requestedTokens: 1
+                key-resolver: "#{@userOrIpKeyResolver}"
 
         # 3. Ledger Service Routes (Double-Entry Mutations, Transfers, Balances)
+        # Transaction mutation limits: 20 req/s, burst 40 to protect database locks
         - id: ledger-service-route
           uri: ${LEDGER_SERVICE_URL:http://localhost:8083}
           predicates:
             - Path=/api/v1/ledger/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 20
+                redis-rate-limiter.burstCapacity: 40
+                redis-rate-limiter.requestedTokens: 1
+                key-resolver: "#{@userOrIpKeyResolver}"
 
         # 4. Notification Service Routes (In-App Notification Feed & SSE/WebSockets)
+        # Polling and feed query limits: 50 req/s, burst 100
         - id: notification-service-route
           uri: ${NOTIFICATION_SERVICE_URL:http://localhost:8084}
           predicates:
             - Path=/api/v1/notifications/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 50
+                redis-rate-limiter.burstCapacity: 100
+                redis-rate-limiter.requestedTokens: 1
+                key-resolver: "#{@userOrIpKeyResolver}"
 
         # 5. Audit Service Routes (Forensic Audit Logs & Merkle Proofs)
+        # Hash and proof calculation limits: 30 req/s, burst 60
         - id: audit-service-route
           uri: ${AUDIT_SERVICE_URL:http://localhost:8085}
           predicates:
             - Path=/api/v1/audit/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 30
+                redis-rate-limiter.burstCapacity: 60
+                redis-rate-limiter.requestedTokens: 1
+                key-resolver: "#{@userOrIpKeyResolver}"
 
 management:
   endpoints:
@@ -90,4 +149,5 @@ logging:
     root: INFO
     com.group2.fse.api_gateway: DEBUG
     org.springframework.cloud.gateway: INFO
+    org.springframework.cloud.gateway.filter.ratelimit: DEBUG
     org.springframework.web.reactive: INFO
