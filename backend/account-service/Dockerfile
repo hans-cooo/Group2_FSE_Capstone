@@ -4,22 +4,12 @@
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
-# Stage 1: Build & Package
+# Stage 1: Layer Extractor
 # ------------------------------------------------------------------------------
-FROM eclipse-temurin:21-jdk-alpine AS builder
-WORKDIR /workspace
-
-COPY .mvn/ .mvn/
-COPY mvnw pom.xml ./
-RUN sed -i 's/\r$//' ./mvnw && chmod +x ./mvnw
-
-RUN ./mvnw dependency:go-offline -B
-
-COPY src ./src
-RUN ./mvnw clean package -DskipTests -B
-
+FROM eclipse-temurin:21-jre-alpine AS builder
 WORKDIR /workspace/target
-RUN java -Djarmode=tools -jar account-service-0.0.1-SNAPSHOT.jar extract --layers --launcher --destination extracted
+COPY target/*.jar ./app.jar
+RUN java -Djarmode=tools -jar app.jar extract --layers --launcher --destination extracted
 
 # ------------------------------------------------------------------------------
 # Stage 2: Minimal Distroless Production Runtime

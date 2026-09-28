@@ -4,26 +4,12 @@
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
-# Stage 1: Build & Package (or Builder Layer Extractor)
+# Stage 1: Layer Extractor
 # ------------------------------------------------------------------------------
-FROM eclipse-temurin:21-jdk-alpine AS builder
-WORKDIR /workspace
-
-# Copy maven wrapper and project definition first for efficient caching
-COPY .mvn/ .mvn/
-COPY mvnw pom.xml ./
-RUN sed -i 's/\r$//' ./mvnw && chmod +x ./mvnw
-
-# Resolve dependencies offline
-RUN ./mvnw dependency:go-offline -B
-
-# Copy source code and build production jar (skip tests as CI/CD verifies them)
-COPY src ./src
-RUN ./mvnw clean package -DskipTests -B
-
-# Extract Spring Boot layered jar for optimal Docker layer caching
+FROM eclipse-temurin:21-jre-alpine AS builder
 WORKDIR /workspace/target
-RUN java -Djarmode=tools -jar api-gateway-0.0.1-SNAPSHOT.jar extract --layers --launcher --destination extracted
+COPY target/*.jar ./app.jar
+RUN java -Djarmode=tools -jar app.jar extract --layers --launcher --destination extracted
 
 # ------------------------------------------------------------------------------
 # Stage 2: Minimal Distroless Production Runtime
