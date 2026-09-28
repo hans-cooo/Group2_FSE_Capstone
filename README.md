@@ -1,194 +1,214 @@
-# This is dev branch
-# Core Retail Ledger & Balance Mutation Engine
-## Phase 1: Local Data Foundation & Enterprise Schema
+# CooBS Core Retail Banking Platform
+### Enterprise Microservices Architecture & Double-Entry Balance Mutation Engine
 
-This repository contains the local multi-datastore foundation and streaming architecture supporting the **Core Retail Ledger & Balance Mutation Engine**.
+CooBS is a cloud-native, enterprise-grade core banking platform engineered for high-concurrency retail financial operations. The system features a double-entry ledger with pessimistic row locking, sub-2ms distributed idempotency guards, event-driven streaming, and a segregated immutable forensic audit store secured by SHA-256 cryptographic hash chaining.
 
 ---
 
-## 1. Quick Start for Team Members
+## 1. Architecture Overview
 
-### Prerequisites
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (v20.10+ with Compose v2) running on your machine.
-- 4GB+ available RAM allocated to Docker.
+CooBS is built around a domain-driven microservices architecture fronted by a Spring Cloud API Gateway, supported by an enterprise polyglot data tier, and managed through a real-time React 19 operational dashboard.
 
-### One-Click Bootstrap
+```mermaid
+flowchart TB
+    subgraph Client Tier
+        UI["CooBS Web Dashboard\n(React 19 + TypeScript + Vite :3000)"]
+    end
 
-#### On Windows (PowerShell):
-```powershell
-.\scripts\setup.ps1
+    subgraph Edge & Routing Tier
+        GW["API Gateway\n(Spring Cloud Gateway :8080)\nCORS • Routing • Actuator Discovery"]
+    end
+
+    subgraph Microservice Tier
+        AUTH["auth-service (:8081)\nJWT • BCrypt • RBAC • MFA"]
+        ACCT["account-service (:8082)\nAccount Lifecycle • KYC • Status"]
+        LEDGER["ledger-service (:8083)\nDouble-Entry Engine • Row Locks • Idempotency"]
+        NOTIF["notification-service (:8084)\nEvent-Driven Notification Stream"]
+        AUDIT["audit-service (:8085)\nCryptographic Chain • Statement Engine"]
+    end
+
+    subgraph Data & Event Streaming Tier
+        ORACLE[("Oracle Free 23ai / 21c XE (:1522)\nMaster System of Record\nPessimistic Locks (SELECT FOR UPDATE)")]
+        POSTGRES[("PostgreSQL 16 (:5434)\nImmutable Audit Store\nSHA-256 Hash Chained Ledger")]
+        REDIS[("Redis 7.4 (:6379)\nDistributed Idempotency Mutex (SETNX)\nBalance Cache")]
+        KAFKA["Apache Kafka 3.8 KRaft (:9092)\nEvent Streaming Backbone\n(transfer-events • mutation-events)"]
+        KAFKA_UI["Kafka UI (:8088)\nCluster & Topic Management"]
+    end
+
+    UI -->|HTTP / REST| GW
+    GW -->|/api/v1/auth/**| AUTH
+    GW -->|/api/v1/accounts/**| ACCT
+    GW -->|/api/v1/ledger/**| LEDGER
+    GW -->|/api/v1/notifications/**| NOTIF
+    GW -->|/api/v1/audit/**| AUDIT
+
+    AUTH --> ORACLE
+    ACCT --> ORACLE
+    ACCT -.->|Publish Events| KAFKA
+    LEDGER --> ORACLE
+    LEDGER --> REDIS
+    LEDGER -.->|Publish Events| KAFKA
+    KAFKA -.->|Consume Events| NOTIF
+    KAFKA -.->|Consume Events| AUDIT
+    AUDIT --> POSTGRES
+    KAFKA_UI -.-> KAFKA
 ```
-
-#### On Linux / macOS (Bash):
-```bash
-chmod +x scripts/*.sh
-./scripts/setup.sh
-```
-
-The script will automatically:
-1. Copy `.env.example` to `.env` if not present.
-2. Launch the 4 datastores, Kafka broker, and Kafka UI in detached mode.
-3. Automatically execute all DDL schemas and seed data on initial container creation.
-4. Run the full verification suite to validate database connectivity, table counts, invariant check constraints, and cryptographic triggers.
 
 ---
 
 ## 2. Infrastructure Inventory & Connection Matrix
 
-| Service | Technology | Host Port | Database / PDB | User Config | Password Config | Purpose |
-|---|---|:---:|---|---|---|---|
-| **`oracle-core-db`** | Oracle Database Free / 21c XE | `1522` | `XEPDB1` | `${APP_USER}` (`core_user`) | `${APP_USER_PASSWORD}` (via `.env`) | System of Record, Master Balances, Pessimistic Row Locking (`SELECT FOR UPDATE`) |
-| **`postgres-audit-db`** | PostgreSQL 16 | `5434` | `audit_store` | `${POSTGRES_USER}` (`postgres`) | `${POSTGRES_PASSWORD}` (via `.env`) | Immutable Forensic Audit Store, SHA-256 Hash Chained Journal, Read Query Path |
-| **`redis-cache`** | Redis 7.4 Alpine | `6379` | `db 0` | *(none)* | *(none)* | Sub-2ms Distributed Idempotency Pre-flight Lock (`SETNX`) & Balance Read Cache |
-| **`kafka-broker`** | Apache Kafka 3.8.0 (KRaft) | `9092` | *(broker)* | *(plaintext)* | *(none)* | Asynchronous Event Streaming Backbone (`ledger.mutation.completed.v1`) |
-| **`kafka-ui`** | Provectus Kafka UI | `8085` | `local-cluster` | *(web)* | *(none)* | Visual browser dashboard for topics, messages, consumer groups |
+| Service / Container | Technology | Host Port | Database / Schema | Auth / User | Purpose |
+|---|---|:---:|---|---|---|
+| **`api-gateway`** | Spring Cloud Gateway | `8080` | N/A | Bearer JWT | Central edge ingress, CORS filtering, path routing, Prometheus actuator metrics |
+| **`auth-service`** | Spring Boot 3.x / Java 21 | `8081` | Oracle `XEPDB1` | Database Auth | Customer registration, staff/customer login, RSA/HMAC JWT tokens, MFA challenges |
+| **`account-service`** | Spring Boot 3.x / Java 21 | `8082` | Oracle `XEPDB1` | Database Auth | Account opening, KYC lifecycle, closure requests, staff/customer account visibility |
+| **`ledger-service`** | Spring Boot 3.x / Java 21 | `8083` | Oracle `XEPDB1` | Database Auth | Atomic double-entry fund transfers, balance mutations, pessimistic row locks |
+| **`notification-service`** | Spring Boot 3.x / Java 21 | `8084` | In-Memory / Kafka | Database Auth | Kafka consumer for debit/credit alerts, in-app notification center |
+| **`audit-service`** | Spring Boot 3.x / Java 21 | `8085` | PostgreSQL `audit_store` | Database Auth | Forensic audit consumer, SHA-256 cryptographic chain verification, statement queries |
+| **`frontend`** | React 19 / TypeScript / Vite | `3000` | N/A | JWT Session | Real-time banking dashboard, persona switcher, transfer engine, audit chain verifier |
+| **`oracle-core-db`** | Oracle Database Free | `1522` / `5501` | `XEPDB1` | `core_user` | Master System of Record (SoR), ACID transactions, table check constraints (`balance >= 0`) |
+| **`postgres-audit-db`** | PostgreSQL 16 Alpine | `5434` | `audit_store` | `postgres` | Segregated immutable audit ledger, append-only trigger protection (`ERRCODE 55000`) |
+| **`redis-cache`** | Redis 7.4 Alpine | `6379` | `db 0` | *(none)* | Sub-2ms distributed idempotency pre-flight locks (`SETNX`) & balance cache |
+| **`kafka-broker`** | Apache Kafka 3.8 (KRaft) | `9092` | *(broker)* | *(plaintext)* | Enterprise event streaming backbone (`transfer-events`, `ledger.mutation.completed.v1`) |
+| **`kafka-ui`** | Provectus Kafka UI | `8088` | `local-cluster` | *(web)* | Visual browser dashboard for topics, messages, offsets, and consumer groups |
 
 ---
 
-## 3. Database Schemas & DDL Architecture
+## 3. Quick Start & Execution
 
-All 14 tables from the approved Capstone ERD are defined and initialized:
+### Prerequisites
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (v20.10+ with Compose v2) with 4GB+ RAM allocated.
+- [Node.js](https://nodejs.org/) (v20+) for local UI development (optional if using Docker).
+- [Java 21](https://adoptium.net/) & Maven (optional for standalone service development).
 
-```mermaid
-erDiagram
-    ROLE ||--o{ USER : assigned_to
-    USER ||--o{ KYC_UPDATE_REQUEST : approves
-    USER ||--o{ SYSTEM_LOG : creates
-    USER ||--o{ TRANSFER_REQUEST : approves
-    USER ||--o{ ACCOUNT_CLOSURE_REQUEST : approves
-    USER ||--o{ ACCOUNT_FLAG : flags
-    USER ||--o{ TRANSACTION : approves
-    USER ||--o{ TRANSACTION_FLAG : flags
-    CUSTOMER ||--|| KYC : has
-    CUSTOMER ||--o{ ACCOUNT : owns
-    KYC ||--o{ KYC_UPDATE_REQUEST : updates
-    ACCOUNT ||--|| BALANCE : has
-    ACCOUNT ||--o{ TRANSFER_REQUEST : source_destination
-    ACCOUNT ||--o{ ACCOUNT_CLOSURE_REQUEST : closed_via
-    ACCOUNT ||--o{ ACCOUNT_FLAG : flagged
-    ACCOUNT ||--o{ TRANSACTION : records
-    ACCOUNT ||--o{ TRANSACTION_AUDIT : audited
-    TRANSACTION ||--o{ TRANSACTION_FLAG : flagged
-    TRANSACTION ||--o{ TRANSACTION_AUDIT : audited
+### Option A: Launch Complete Stack (All Microservices + Data Tier)
+To launch all 6 Spring Boot microservices, the 4 datastores, Kafka, and Kafka UI in containers:
+
+```bash
+docker compose --profile app up -d --build
 ```
 
-### Data Architecture & Single Source of Truth (SSOT)
+### Option B: Launch Data Tier Only (for Local IDE Debugging)
+To launch only Oracle, PostgreSQL, Redis, Kafka, and Kafka UI:
 
-To strictly adhere to enterprise banking standards and avoid data drift / split-brain hazards:
-- **Oracle XE (`core_user` in `XEPDB1`)**: Serves as the **Exclusive Master System of Record (SoR)** holding all 14 core business and operational tables.
-- **PostgreSQL (`audit_store`)**: Serves as the **Segregated Immutable Forensic Audit Store** holding exclusively `audit_store.ledger_mutation_audit`.
+```bash
+docker compose up -d
+```
 
-### Master Operational Tables (Oracle Exclusive)
-1. **`ROLE`**: Administrative and operational permission roles (`ROLE_ADMIN`, `ROLE_TELLER`, `ROLE_CUSTOMER`).
-2. **`USER`**: Internal bank personnel (tellers, compliance officers, managers).
-3. **`CUSTOMER`**: Retail bank clients authenticated at the consumer edge.
-4. **`KYC`**: Customer identification and verification profiles.
-5. **`KYC_UPDATE_REQUEST`**: Workflow requests for customer data modifications requiring teller approval.
-6. **`ACCOUNT`**: Deposit accounts (`SAVINGS`, `CHECKING`) with currency (PHP default) and status.
-7. **`BALANCE`**: Authoritative available balance with strict check constraint (`available_balance >= 0`). Target for pessimistic locks.
-8. **`TRANSFER_REQUEST`**: Dual-account fund transfer staging and approval records.
-9. **`ACCOUNT_FLAG`**: Risk, judicial, or administrative holds on accounts.
-10. **`TRANSACTION`**: Master journal entries capturing transaction type, amount, old balance, and new balance.
-11. **`TRANSACTION_FLAG`**: Fraud / AML inspection flags on specific transaction events.
-12. **`SYSTEM_LOG`**: Operational activity and microservice audit log.
-13. **`TRANSACTION_AUDIT`**: Mirror audit ledger.
-14. **`ACCOUNT_CLOSURE_REQUEST`**: Customer-initiated closure workflow. Validates zero balance ($0.0000) and requires admin approval to transition ACCOUNT status to CLOSED, leaving the CUSTOMER entity intact.
-
-### Immutable Audit Store (PostgreSQL Exclusive)
-- **`audit_store.ledger_mutation_audit`**:
-  - Cryptographic SHA-256 hash chaining linking each mutation to the previous hash.
-  - Database trigger throwing SQL exception `ERRCODE 55000` on any `UPDATE` or `DELETE` attempt.
+### Accessing the Web Dashboard
+Launch the frontend UI:
+```bash
+cd frontend
+npm install
+npm run preview   # Runs on port 3000 (pre-configured proxy to Gateway :8080)
+```
+Open **`http://localhost:3000`** in your browser.
 
 ---
 
-## 4. Developer Runbook & Common Commands
+## 4. Seeded Identities & Test Personas
 
-### Verification & Health Check
-Run at any time to verify system health and constraint integrity:
+All seed accounts are pre-configured in Oracle Database with default password **`Password123!`**:
+
+| Persona | Role | Username | Password | Default Vault Accounts | Key Permissions |
+|---|---|---|---|---|---|
+| **Retail Customer 1** | `ROLE_CUSTOMER` | `john_doe` | `Password123!` | Account #1 (`ACC_10000001`)<br>Savings: **₱49,625.00** | View own accounts, submit transfers, request account closure |
+| **Retail Customer 2** | `ROLE_CUSTOMER` | `maria_santos` | `Password123!` | Account #2 (`ACC_10000002`)<br>Checking: **₱25,375.00** | View own accounts, receive transfers, request account closure |
+| **Retail Customer 3** | `ROLE_CUSTOMER` | `david_kim` | `Password123!` | Account #3 (`ACC_10000003`)<br>Savings: **₱100,000.00** | View own accounts, submit transfers |
+| **Branch Teller** | `ROLE_TELLER` | `teller_alice` | `Password123!` | *Bank-wide operational scope* | **View all customer accounts**, process counter deposits, assisted transfers, KYC approvals |
+| **Administrator** | `ROLE_ADMIN` | `admin` | `Password123!` | *Global supervisory scope* | **View all accounts**, approve account closures, full cryptographic audit inspection |
+
+---
+
+## 5. Core Architectural Differentiators
+
+### A. Atomic Double-Entry Ledger Engine
+Every fund transfer executes zero-sum accounting across debit and credit journal entries within a single database transaction. 
+- Overdrafts are physically prevented at both the application layer and database engine level via Oracle table check constraints:
+  ```sql
+  CONSTRAINT chk_balance_non_negative CHECK (available_balance >= 0)
+  ```
+
+### B. Strict Concurrency & Pessimistic Row Locking
+To eliminate lost updates and race conditions during high-frequency balance mutations, `ledger-service` executes deterministic account locking:
+```sql
+SELECT available_balance FROM BALANCE WHERE account_id = :id FOR UPDATE
+```
+Accounts are ordered by ID before acquisition to guarantee deadlock-free execution.
+
+### C. Sub-2ms Distributed Idempotency Guard (Redis Mutex)
+To protect against network retries and replay attacks, `ledger-service` enforces a multi-tier idempotency pipeline:
+1. **Pre-flight Lock**: Redis atomic `SET key value NX EX 120` acquires a 120-second lease within 2ms.
+2. **Payload Checksum**: Compares payload SHA-256 hash against previously executed requests.
+3. **Cached Replay**: Duplicate submissions return the original transaction response (`X-Cache: HIT`) without debiting accounts twice.
+
+### D. Segregated Cryptographic Audit Ledger (SHA-256)
+Audit data is segregated from the operational database to guarantee non-repudiation:
+- Events stream asynchronously through Kafka to `audit-service`.
+- Saved in PostgreSQL `audit_store.ledger_mutation_audit` with cryptographic hash chaining:
+  $$\text{Current Hash} = \text{SHA256}(\text{Previous Hash} + \text{Account ID} + \text{Txn ID} + \text{Type} + \text{Amount} + \text{New Balance} + \text{Timestamp})$$
+- The table is locked with an append-only trigger that aborts `UPDATE` and `DELETE` queries with SQL code `ERRCODE 55000`.
+- The UI features a real-time verification engine verifying hundreds of historical mutations in milliseconds.
+
+---
+
+## 6. End-to-End Automated Golden Path Demonstration
+
+A comprehensive automated test suite validates the entire 7-tier architecture against the live API Gateway:
+
+### Run in PowerShell:
 ```powershell
-.\scripts\verify.ps1
+.\scripts\demo_golden_path.ps1
 ```
 
-### Stopping & Starting
-```powershell
-# Stop without losing data:
-.\scripts\stop.ps1
-
-# Resume containers:
-.\scripts\start.ps1
+### Run in Python (Cross-Platform):
+```bash
+python ./scripts/demo_golden_path.py
 ```
 
-### Full Clean Reset
-To completely wipe databases, Kafka logs, and Redis cache and re-initialize from scratch:
-```powershell
-.\scripts\reset.ps1
-```
+### Verification Pipeline:
+1. **API Gateway Health & Route Discovery**: Verifies `/actuator/health` and dynamic service routes.
+2. **Customer Registration & JWT Provisioning**: Registers a new customer and acquires an HMAC-signed Bearer JWT.
+3. **Account Lifecycle Inspection**: Verifies account retrieval through `account-service`.
+4. **Atomic Double-Entry Fund Transfer**: Executes a ₱150.00 inter-account transfer through `ledger-service`.
+5. **Idempotent Replay Mutex Guard**: Replays the exact transfer payload with the same `Idempotency-Key` and verifies zero duplicate balance deduction in under 15ms.
+6. **In-App Notification Delivery**: Validates Kafka event consumption by `notification-service`.
+7. **Forensic Cryptographic Audit Verification**: Executes `/api/v1/audit/verify-chain/1` to verify hundreds of SHA-256 chained audit records and confirms `isChainIntact: true`.
 
-### Direct Database Access
+---
 
-#### Oracle SQLPlus CLI
+## 7. Developer Runbook & Direct Database Access
+
+### Oracle SQLPlus CLI
 ```bash
 docker exec -it oracle-core-db bash -c 'sqlplus "${APP_USER}/${APP_USER_PASSWORD}@localhost:1521/${ORACLE_DATABASE}"'
 ```
 
-#### PostgreSQL PSQL CLI
+### PostgreSQL PSQL CLI
 ```bash
 docker exec -it postgres-audit-db psql -U postgres -d audit_store
 ```
 
-#### Redis CLI
+### Redis CLI
 ```bash
 docker exec -it redis-cache redis-cli
 ```
 
-#### Kafka CLI (Produce & Consume)
+### Kafka Event Consumer
 ```bash
-# Consume ledger events:
 docker exec -it kafka-broker /opt/kafka/bin/kafka-console-consumer.sh \
   --bootstrap-server localhost:9092 \
-  --topic ledger.mutation.completed.v1 \
+  --topic transfer-events \
   --from-beginning
 ```
 
----
+### System Health & Diagnostics
+```powershell
+# Verify container health and port bindings
+docker compose ps
 
-## 5. Spring Boot `application.yml` Connection Templates
-
-When developing Spring Boot services in Phase 2 & 3:
-
-```yaml
-spring:
-  # Oracle Master System of Record (Primary Datasource)
-  datasource:
-    oracle:
-      url: jdbc:oracle:thin:@${ORACLE_HOST:localhost}:${ORACLE_PORT:1522}/${ORACLE_DATABASE:XEPDB1}
-      username: ${APP_USER:core_user}
-      password: ${APP_USER_PASSWORD}
-      driver-class-name: oracle.jdbc.OracleDriver
-      hikari:
-        maximum-pool-size: 30
-        minimum-idle: 5
-
-    # PostgreSQL Immutable Audit Store (Secondary Datasource)
-    postgres:
-      url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5434}/${POSTGRES_DB:audit_store}
-      username: ${POSTGRES_USER:postgres}
-      password: ${POSTGRES_PASSWORD}
-      driver-class-name: org.postgresql.Driver
-      hikari:
-        maximum-pool-size: 20
-        minimum-idle: 5
-
-  # Redis Distributed Idempotency & Cache
-  data:
-    redis:
-      host: localhost
-      port: 6379
-
-  # Kafka Event Streaming
-  kafka:
-    bootstrap-servers: localhost:9092
-    producer:
-      key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+# Inspect logs of a specific service
+docker compose logs -f ledger-service
+docker compose logs -f audit-service
 ```
