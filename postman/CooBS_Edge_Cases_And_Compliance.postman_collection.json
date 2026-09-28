@@ -1,0 +1,1184 @@
+{
+  "info": {
+    "_postman_id": "e283b4c1-6a10-4fa3-9528-6d2740bc1899",
+    "name": "CooBS - Edge Cases & Compliance Test Suite",
+    "description": "Comprehensive Postman test collection validating negative flows, security perimeter guards, distributed Redis token blacklisting, RBAC violations, ledger financial invariants, risk holds, and administrative rejection workflows.\n\nDesigned to run using the 'CooBS Local Environment' (CooBS_Local.postman_environment.json).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "customerUsername",
+      "value": "john_doe",
+      "type": "string"
+    },
+    {
+      "key": "customerPassword",
+      "value": "Password123!",
+      "type": "string"
+    },
+    {
+      "key": "staffUsername",
+      "value": "admin",
+      "type": "string"
+    },
+    {
+      "key": "staffPassword",
+      "value": "Password123!",
+      "type": "string"
+    },
+    {
+      "key": "customer_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "admin_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "teller_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "source_account_id",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "dest_account_id",
+      "value": "2",
+      "type": "string"
+    },
+    {
+      "key": "tokenToRevoke",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "activeFlagId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "kycRejectId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "zeroBalanceAccountId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "closureRejectId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "notifToReadId",
+      "value": "1",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Security Perimeter & Token Blacklist",
+      "item": [
+        {
+          "name": "1.1 Customer Login (Capture Token to Revoke)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Customer login returns 200 OK', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.expect(data.authData).to.exist;",
+                  "pm.environment.set('tokenToRevoke', data.authData.accessToken);",
+                  "pm.collectionVariables.set('tokenToRevoke', data.authData.accessToken);",
+                  "pm.environment.set('customer_token', data.authData.accessToken);",
+                  "pm.collectionVariables.set('customer_token', data.authData.accessToken);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{customerUsername}}\",\n  \"password\": \"{{customerPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/customers/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "customers",
+                "login"
+              ]
+            }
+          }
+        },
+        {
+          "name": "1.2 RBAC Guard: Customer Accessing Staff Endpoint Rejected (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Customer token accessing staff registry is rejected with 403 Forbidden', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/accounts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accounts"
+              ]
+            }
+          }
+        },
+        {
+          "name": "1.3 Revoke Token Session (Redis Blacklist)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Token revocation returns 204 No Content', function () {",
+                  "    pm.expect([200, 204]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenToRevoke}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/token/revoke",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "token",
+                "revoke"
+              ]
+            }
+          }
+        },
+        {
+          "name": "1.4 Reusing Revoked Token Rejected by Distributed Blacklist (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Reusing blacklisted token returns 401 Unauthorized', function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenToRevoke}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/token/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "token",
+                "me"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Core Ledger Engine Validation & Invariants",
+      "item": [
+        {
+          "name": "2.1 Customer Re-Login (Acquire Fresh Session)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Login returns 200 OK', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.environment.set('customer_token', data.authData.accessToken);",
+                  "pm.collectionVariables.set('customer_token', data.authData.accessToken);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{customerUsername}}\",\n  \"password\": \"{{customerPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/customers/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "customers",
+                "login"
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.2 Transfer to Same Account Rejected (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Transfer to self rejected with 400 Bad Request', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.test('Validation message confirms distinct accounts required', function () {",
+                  "    var msg = JSON.stringify(data);",
+                  "    pm.expect(msg).to.include('distinct');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "self-trf-{{$timestamp}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sourceAccountId\": {{source_account_id}},\n  \"destinationAccountId\": {{source_account_id}},\n  \"amount\": 50.0000,\n  \"referenceNo\": \"REF-SELF-TEST\",\n  \"currency\": \"PHP\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ledger/transfer",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ledger",
+                "transfer"
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.3 Missing Mandatory Idempotency-Key Rejected (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Missing Idempotency-Key rejected with 400 Bad Request', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.test('Error code specifies MISSING_IDEMPOTENCY_KEY', function () {",
+                  "    pm.expect(data.errorCode || data.title).to.include('MISSING_IDEMPOTENCY_KEY');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sourceAccountId\": {{source_account_id}},\n  \"destinationAccountId\": {{dest_account_id}},\n  \"amount\": 50.0000,\n  \"referenceNo\": \"REF-NO-IDEMP\",\n  \"currency\": \"PHP\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ledger/transfer",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ledger",
+                "transfer"
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.4 Non-Positive Transfer Amount Rejected (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Zero amount rejected with 400 Bad Request', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "zero-amt-{{$timestamp}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sourceAccountId\": {{source_account_id}},\n  \"destinationAccountId\": {{dest_account_id}},\n  \"amount\": 0.0000,\n  \"referenceNo\": \"REF-ZERO-AMT\",\n  \"currency\": \"PHP\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ledger/transfer",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ledger",
+                "transfer"
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.5 Non-Existent Account Transfer Rejected (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Non-existent account rejected with 404 Not Found', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "not-found-{{$timestamp}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sourceAccountId\": 999999,\n  \"destinationAccountId\": {{dest_account_id}},\n  \"amount\": 50.0000,\n  \"referenceNo\": \"REF-NOT-FOUND\",\n  \"currency\": \"PHP\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ledger/transfer",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ledger",
+                "transfer"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Banking Compliance & Risk Holds",
+      "item": [
+        {
+          "name": "3.1 Non-Zero Balance Closure Request Rejected (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Account with funds rejected from closure with 400 Bad Request', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.test('Error code specifies ACCOUNT_NON_ZERO_BALANCE', function () {",
+                  "    pm.expect(data.errorCode || data.title).to.include('ACCOUNT_NON_ZERO_BALANCE');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Attempting to close funded account without withdrawing capital\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/accounts/{{source_account_id}}/closure-request",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accounts",
+                "{{source_account_id}}",
+                "closure-request"
+              ]
+            }
+          }
+        },
+        {
+          "name": "3.2 Staff Login (Admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Staff login returns 200 OK', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.environment.set('admin_token', data.authData.accessToken);",
+                  "pm.collectionVariables.set('admin_token', data.authData.accessToken);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{staffUsername}}\",\n  \"password\": \"{{staffPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/staff/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "staff",
+                "login"
+              ]
+            }
+          }
+        },
+        {
+          "name": "3.3 Staff Freezes Account (Status: FROZEN)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Account freeze returns 200 OK', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.expect(data.status).to.eql('FROZEN');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"FROZEN\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/accounts/{{dest_account_id}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accounts",
+                "{{dest_account_id}}",
+                "status"
+              ]
+            }
+          }
+        },
+        {
+          "name": "3.4 Staff Unfreezes Account (Status: ACTIVE)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Account unfreeze returns 200 OK', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.expect(data.status).to.eql('ACTIVE');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"ACTIVE\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/accounts/{{dest_account_id}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accounts",
+                "{{dest_account_id}}",
+                "status"
+              ]
+            }
+          }
+        },
+        {
+          "name": "3.5 Staff Imposes Risk Hold (Flag)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Adding flag returns 201 Created', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.expect(data.flagId).to.exist;",
+                  "pm.environment.set('activeFlagId', data.flagId);",
+                  "pm.collectionVariables.set('activeFlagId', data.flagId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Anti-Money Laundering (AML) Compliance Hold\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/accounts/{{dest_account_id}}/flags",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accounts",
+                "{{dest_account_id}}",
+                "flags"
+              ]
+            }
+          }
+        },
+        {
+          "name": "3.6 Admin Lifts Risk Hold",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Removing flag returns 200 OK', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.expect(data.status).to.eql('REMOVED');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/accounts/{{dest_account_id}}/flags/{{activeFlagId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accounts",
+                "{{dest_account_id}}",
+                "flags",
+                "{{activeFlagId}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Administrative Rejection Workflows",
+      "item": [
+        {
+          "name": "4.1 Customer Submits KYC Update Request",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('KYC update request accepted with 202 Accepted', function () {",
+                  "    pm.response.to.have.status(202);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.expect(data.kycRequestId).to.exist;",
+                  "pm.environment.set('kycRejectId', data.kycRequestId);",
+                  "pm.collectionVariables.set('kycRejectId', data.kycRequestId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"newFirstName\": \"John\",\n  \"newLastName\": \"Doe-Questionable\",\n  \"newAddress\": \"Unknown PO Box\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/customers/kyc/update-request",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "customers",
+                "kyc",
+                "update-request"
+              ]
+            }
+          }
+        },
+        {
+          "name": "4.2 Admin Rejects KYC Update Request",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('KYC rejection returns 200 OK', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.expect(data.status).to.eql('REJECTED');",
+                  "pm.expect(data.rejectionReason).to.include('PO Box');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rejectionReason\": \"Residential address required; PO Box is not permissible per KYC regulations\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/customers/kyc/update-requests/{{kycRejectId}}/reject",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "customers",
+                "kyc",
+                "update-requests",
+                "{{kycRejectId}}",
+                "reject"
+              ]
+            }
+          }
+        },
+        {
+          "name": "4.3 Teller Opens Fresh Empty Account for Customer",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Account creation returns 201 Created', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.environment.set('zeroBalanceAccountId', data.accountId);",
+                  "pm.collectionVariables.set('zeroBalanceAccountId', data.accountId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": 1,\n  \"accountType\": \"SAVINGS\",\n  \"currency\": \"PHP\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/accounts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accounts"
+              ]
+            }
+          }
+        },
+        {
+          "name": "4.4 Customer Submits Closure Request on Empty Account",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Closure request returns 202 Accepted', function () {",
+                  "    pm.response.to.have.status(202);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.environment.set('closureRejectId', data.closureRequestId);",
+                  "pm.collectionVariables.set('closureRejectId', data.closureRequestId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"No longer needed\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/accounts/{{zeroBalanceAccountId}}/closure-request",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accounts",
+                "{{zeroBalanceAccountId}}",
+                "closure-request"
+              ]
+            }
+          }
+        },
+        {
+          "name": "4.5 Admin Rejects Account Closure Request",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Closure rejection returns 200 OK', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.expect(data.status).to.eql('REJECTED');",
+                  "pm.expect(data.rejectionReason).to.include('settlement');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rejectionReason\": \"Pending institutional check clearance settlement\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/accounts/closure-requests/{{closureRejectId}}/reject",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accounts",
+                "closure-requests",
+                "{{closureRejectId}}",
+                "reject"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Notification State Transitions",
+      "item": [
+        {
+          "name": "5.1 Get Initial Unread Notification Count",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns 200 OK', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.environment.set('initialUnreadCount', data.unreadCount || 0);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/unread-count",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "unread-count"
+              ]
+            }
+          }
+        },
+        {
+          "name": "5.2 Fetch Notifications and Capture ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Returns 200 OK', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "var items = data.content || data;",
+                  "if (items.length > 0) {",
+                  "    pm.environment.set('notifToReadId', items[0].notificationId || items[0].id);",
+                  "    pm.collectionVariables.set('notifToReadId', items[0].notificationId || items[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/my-notifications?page=0&size=5",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "my-notifications"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "5"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "5.3 Mark Notification As Read",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Mark as read returns 200 OK', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.expect(data.isRead).to.eql(true);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/{{notifToReadId}}/read",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "{{notifToReadId}}",
+                "read"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
