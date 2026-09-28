@@ -2,13 +2,33 @@
   "info": {
     "_postman_id": "b73a5a41-2c70-4e28-89c5-7f938f32dae1",
     "name": "Core Banking - Complete User Lifecycle Flow",
-    "description": "End-to-End user flow: Customer Registration -> Login -> KYC Submit -> Teller Opens Account -> Customer KYC Update -> Admin Approves KYC -> Customer Account Closure Request -> Admin Approves Closure.\n\nAll variables are prefixed with 'flow_' to prevent conflicts with active environments.",
+    "description": "End-to-End user flow: Customer Registration -> Login -> KYC Submit -> Teller Opens Account -> Customer KYC Update -> Admin Approves KYC -> Customer Account Closure Request -> Admin Approves Closure.\n\nDesigned to run using the 'CooBS Local Environment' (CooBS_Local.postman_environment.json). Dynamically populates and uses customer_token, teller_token, admin_token, and source_account_id.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
     {
       "key": "baseUrl",
       "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "customer_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "teller_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "admin_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "source_account_id",
+      "value": "",
       "type": "string"
     },
     {
@@ -148,8 +168,16 @@
         },
         "url": {
           "raw": "{{baseUrl}}/api/v1/auth/customers/register",
-          "host": ["{{baseUrl}}"],
-          "path": ["api", "v1", "auth", "customers", "register"]
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "auth",
+            "customers",
+            "register"
+          ]
         }
       }
     },
@@ -168,6 +196,8 @@
               "pm.test('JWT Bearer token acquired', function () {",
               "    pm.expect(res.authData).to.exist;",
               "    pm.expect(res.authData.accessToken).to.be.a('string');",
+              "    pm.environment.set('customer_token', res.authData.accessToken);",
+              "    pm.collectionVariables.set('customer_token', res.authData.accessToken);",
               "    pm.collectionVariables.set('flow_customerToken', res.authData.accessToken);",
               "    pm.environment.set('flow_customerToken', res.authData.accessToken);",
               "});"
@@ -189,8 +219,16 @@
         },
         "url": {
           "raw": "{{baseUrl}}/api/v1/auth/customers/login",
-          "host": ["{{baseUrl}}"],
-          "path": ["api", "v1", "auth", "customers", "login"]
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "auth",
+            "customers",
+            "login"
+          ]
         }
       }
     },
@@ -222,7 +260,7 @@
           },
           {
             "key": "Authorization",
-            "value": "Bearer {{flow_customerToken}}"
+            "value": "Bearer {{customer_token}}"
           }
         ],
         "body": {
@@ -231,8 +269,16 @@
         },
         "url": {
           "raw": "{{baseUrl}}/api/v1/customers/kyc/submit",
-          "host": ["{{baseUrl}}"],
-          "path": ["api", "v1", "customers", "kyc", "submit"]
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "customers",
+            "kyc",
+            "submit"
+          ]
         }
       }
     },
@@ -250,6 +296,8 @@
               "var res = pm.response.json();",
               "pm.test('Teller roles verified', function () {",
               "    pm.expect(res.authData.roles).to.include('ROLE_TELLER');",
+              "    pm.environment.set('teller_token', res.authData.accessToken);",
+              "    pm.collectionVariables.set('teller_token', res.authData.accessToken);",
               "    pm.collectionVariables.set('flow_tellerToken', res.authData.accessToken);",
               "    pm.environment.set('flow_tellerToken', res.authData.accessToken);",
               "});"
@@ -271,8 +319,16 @@
         },
         "url": {
           "raw": "{{baseUrl}}/api/v1/auth/staff/login",
-          "host": ["{{baseUrl}}"],
-          "path": ["api", "v1", "auth", "staff", "login"]
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "auth",
+            "staff",
+            "login"
+          ]
         }
       }
     },
@@ -291,6 +347,8 @@
               "pm.test('Account ID and Number generated', function () {",
               "    pm.expect(res.accountId).to.exist;",
               "    pm.expect(res.accountNumber).to.include('ACC_');",
+              "    pm.environment.set('source_account_id', String(res.accountId));",
+              "    pm.collectionVariables.set('source_account_id', String(res.accountId));",
               "    pm.collectionVariables.set('flow_accountId', res.accountId);",
               "    pm.environment.set('flow_accountId', res.accountId);",
               "    pm.collectionVariables.set('flow_accountNumber', res.accountNumber);",
@@ -309,7 +367,7 @@
           },
           {
             "key": "Authorization",
-            "value": "Bearer {{flow_tellerToken}}"
+            "value": "Bearer {{teller_token}}"
           }
         ],
         "body": {
@@ -318,8 +376,14 @@
         },
         "url": {
           "raw": "{{baseUrl}}/api/v1/accounts",
-          "host": ["{{baseUrl}}"],
-          "path": ["api", "v1", "accounts"]
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "accounts"
+          ]
         }
       }
     },
@@ -354,7 +418,7 @@
           },
           {
             "key": "Authorization",
-            "value": "Bearer {{flow_customerToken}}"
+            "value": "Bearer {{customer_token}}"
           }
         ],
         "body": {
@@ -363,8 +427,16 @@
         },
         "url": {
           "raw": "{{baseUrl}}/api/v1/customers/kyc/update-request",
-          "host": ["{{baseUrl}}"],
-          "path": ["api", "v1", "customers", "kyc", "update-request"]
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "customers",
+            "kyc",
+            "update-request"
+          ]
         }
       }
     },
@@ -382,6 +454,8 @@
               "var res = pm.response.json();",
               "pm.test('ROLE_ADMIN verified', function () {",
               "    pm.expect(res.authData.roles).to.include('ROLE_ADMIN');",
+              "    pm.environment.set('admin_token', res.authData.accessToken);",
+              "    pm.collectionVariables.set('admin_token', res.authData.accessToken);",
               "    pm.collectionVariables.set('flow_adminToken', res.authData.accessToken);",
               "    pm.environment.set('flow_adminToken', res.authData.accessToken);",
               "});"
@@ -403,8 +477,16 @@
         },
         "url": {
           "raw": "{{baseUrl}}/api/v1/auth/staff/login",
-          "host": ["{{baseUrl}}"],
-          "path": ["api", "v1", "auth", "staff", "login"]
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "auth",
+            "staff",
+            "login"
+          ]
         }
       }
     },
@@ -432,13 +514,23 @@
         "header": [
           {
             "key": "Authorization",
-            "value": "Bearer {{flow_adminToken}}"
+            "value": "Bearer {{admin_token}}"
           }
         ],
         "url": {
           "raw": "{{baseUrl}}/api/v1/customers/kyc/update-requests/{{flow_kycRequestId}}/approve",
-          "host": ["{{baseUrl}}"],
-          "path": ["api", "v1", "customers", "kyc", "update-requests", "{{flow_kycRequestId}}", "approve"]
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "customers",
+            "kyc",
+            "update-requests",
+            "{{flow_kycRequestId}}",
+            "approve"
+          ]
         }
       }
     },
@@ -473,7 +565,7 @@
           },
           {
             "key": "Authorization",
-            "value": "Bearer {{flow_customerToken}}"
+            "value": "Bearer {{customer_token}}"
           }
         ],
         "body": {
@@ -481,9 +573,17 @@
           "raw": "{\n  \"reason\": \"Relocating abroad and consolidating bank accounts\"\n}"
         },
         "url": {
-          "raw": "{{baseUrl}}/api/v1/accounts/{{flow_accountId}}/closure-request",
-          "host": ["{{baseUrl}}"],
-          "path": ["api", "v1", "accounts", "{{flow_accountId}}", "closure-request"]
+          "raw": "{{baseUrl}}/api/v1/accounts/{{source_account_id}}/closure-request",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "accounts",
+            "{{source_account_id}}",
+            "closure-request"
+          ]
         }
       }
     },
@@ -512,13 +612,22 @@
         "header": [
           {
             "key": "Authorization",
-            "value": "Bearer {{flow_adminToken}}"
+            "value": "Bearer {{admin_token}}"
           }
         ],
         "url": {
           "raw": "{{baseUrl}}/api/v1/accounts/closure-requests/{{flow_closureRequestId}}/approve",
-          "host": ["{{baseUrl}}"],
-          "path": ["api", "v1", "accounts", "closure-requests", "{{flow_closureRequestId}}", "approve"]
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "accounts",
+            "closure-requests",
+            "{{flow_closureRequestId}}",
+            "approve"
+          ]
         }
       }
     }

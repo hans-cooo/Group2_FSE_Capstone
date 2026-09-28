@@ -2,9 +2,91 @@
   "info": {
     "_postman_id": "e283b4c1-6a10-4fa3-9528-6d2740bc1899",
     "name": "CooBS - Edge Cases & Compliance Test Suite",
-    "description": "Comprehensive Postman test collection validating negative flows, security perimeter guards, distributed Redis token blacklisting, RBAC violations, ledger financial invariants, risk holds, and administrative rejection workflows.\n\nDesigned to run using the 'Core Banking Local Environment'.",
+    "description": "Comprehensive Postman test collection validating negative flows, security perimeter guards, distributed Redis token blacklisting, RBAC violations, ledger financial invariants, risk holds, and administrative rejection workflows.\n\nDesigned to run using the 'CooBS Local Environment' (CooBS_Local.postman_environment.json).",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "customerUsername",
+      "value": "john_doe",
+      "type": "string"
+    },
+    {
+      "key": "customerPassword",
+      "value": "Password123!",
+      "type": "string"
+    },
+    {
+      "key": "staffUsername",
+      "value": "admin",
+      "type": "string"
+    },
+    {
+      "key": "staffPassword",
+      "value": "Password123!",
+      "type": "string"
+    },
+    {
+      "key": "customer_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "admin_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "teller_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "source_account_id",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "dest_account_id",
+      "value": "2",
+      "type": "string"
+    },
+    {
+      "key": "tokenToRevoke",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "activeFlagId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "kycRejectId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "zeroBalanceAccountId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "closureRejectId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "notifToReadId",
+      "value": "1",
+      "type": "string"
+    }
+  ],
   "item": [
     {
       "name": "1. Security Perimeter & Token Blacklist",
@@ -23,7 +105,9 @@
                   "var data = pm.response.json();",
                   "pm.expect(data.authData).to.exist;",
                   "pm.environment.set('tokenToRevoke', data.authData.accessToken);",
-                  "pm.environment.set('authToken', data.authData.accessToken);"
+                  "pm.collectionVariables.set('tokenToRevoke', data.authData.accessToken);",
+                  "pm.environment.set('customer_token', data.authData.accessToken);",
+                  "pm.collectionVariables.set('customer_token', data.authData.accessToken);"
                 ]
               }
             }
@@ -31,7 +115,10 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -39,8 +126,16 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/auth/customers/login",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "auth", "customers", "login"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "customers",
+                "login"
+              ]
             }
           }
         },
@@ -62,12 +157,21 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/api/v1/accounts",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "accounts"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accounts"
+              ]
             }
           }
         },
@@ -89,12 +193,23 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{tokenToRevoke}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenToRevoke}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/api/v1/auth/token/revoke",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "auth", "token", "revoke"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "token",
+                "revoke"
+              ]
             }
           }
         },
@@ -116,12 +231,23 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{tokenToRevoke}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tokenToRevoke}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/api/v1/auth/token/me",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "auth", "token", "me"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "token",
+                "me"
+              ]
             }
           }
         }
@@ -142,7 +268,8 @@
                   "    pm.response.to.have.status(200);",
                   "});",
                   "var data = pm.response.json();",
-                  "pm.environment.set('authToken', data.authData.accessToken);"
+                  "pm.environment.set('customer_token', data.authData.accessToken);",
+                  "pm.collectionVariables.set('customer_token', data.authData.accessToken);"
                 ]
               }
             }
@@ -150,7 +277,10 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -158,8 +288,16 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/auth/customers/login",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "auth", "customers", "login"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "customers",
+                "login"
+              ]
             }
           }
         },
@@ -186,18 +324,34 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{authToken}}" },
-              { "key": "Idempotency-Key", "value": "self-trf-{{$timestamp}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "self-trf-{{$timestamp}}"
+              }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"sourceAccountId\": {{sourceAccountId}},\n  \"destinationAccountId\": {{sourceAccountId}},\n  \"amount\": 50.0000,\n  \"referenceNo\": \"REF-SELF-TEST\",\n  \"currency\": \"PHP\"\n}"
+              "raw": "{\n  \"sourceAccountId\": {{source_account_id}},\n  \"destinationAccountId\": {{source_account_id}},\n  \"amount\": 50.0000,\n  \"referenceNo\": \"REF-SELF-TEST\",\n  \"currency\": \"PHP\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/ledger/transfer",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "ledger", "transfer"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ledger",
+                "transfer"
+              ]
             }
           }
         },
@@ -223,17 +377,30 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}"
+              }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"sourceAccountId\": {{sourceAccountId}},\n  \"destinationAccountId\": {{destAccountId}},\n  \"amount\": 50.0000,\n  \"referenceNo\": \"REF-NO-IDEMP\",\n  \"currency\": \"PHP\"\n}"
+              "raw": "{\n  \"sourceAccountId\": {{source_account_id}},\n  \"destinationAccountId\": {{dest_account_id}},\n  \"amount\": 50.0000,\n  \"referenceNo\": \"REF-NO-IDEMP\",\n  \"currency\": \"PHP\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/ledger/transfer",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "ledger", "transfer"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ledger",
+                "transfer"
+              ]
             }
           }
         },
@@ -255,18 +422,34 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{authToken}}" },
-              { "key": "Idempotency-Key", "value": "zero-amt-{{$timestamp}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "zero-amt-{{$timestamp}}"
+              }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"sourceAccountId\": {{sourceAccountId}},\n  \"destinationAccountId\": {{destAccountId}},\n  \"amount\": 0.0000,\n  \"referenceNo\": \"REF-ZERO-AMT\",\n  \"currency\": \"PHP\"\n}"
+              "raw": "{\n  \"sourceAccountId\": {{source_account_id}},\n  \"destinationAccountId\": {{dest_account_id}},\n  \"amount\": 0.0000,\n  \"referenceNo\": \"REF-ZERO-AMT\",\n  \"currency\": \"PHP\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/ledger/transfer",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "ledger", "transfer"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ledger",
+                "transfer"
+              ]
             }
           }
         },
@@ -288,18 +471,34 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{authToken}}" },
-              { "key": "Idempotency-Key", "value": "not-found-{{$timestamp}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "not-found-{{$timestamp}}"
+              }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"sourceAccountId\": 999999,\n  \"destinationAccountId\": {{destAccountId}},\n  \"amount\": 50.0000,\n  \"referenceNo\": \"REF-NOT-FOUND\",\n  \"currency\": \"PHP\"\n}"
+              "raw": "{\n  \"sourceAccountId\": 999999,\n  \"destinationAccountId\": {{dest_account_id}},\n  \"amount\": 50.0000,\n  \"referenceNo\": \"REF-NOT-FOUND\",\n  \"currency\": \"PHP\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/ledger/transfer",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "ledger", "transfer"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ledger",
+                "transfer"
+              ]
             }
           }
         }
@@ -330,17 +529,31 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}"
+              }
             ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"reason\": \"Attempting to close funded account without withdrawing capital\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/api/v1/accounts/{{sourceAccountId}}/closure-request",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "accounts", "{{sourceAccountId}}", "closure-request"]
+              "raw": "{{baseUrl}}/api/v1/accounts/{{source_account_id}}/closure-request",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accounts",
+                "{{source_account_id}}",
+                "closure-request"
+              ]
             }
           }
         },
@@ -356,7 +569,8 @@
                   "    pm.response.to.have.status(200);",
                   "});",
                   "var data = pm.response.json();",
-                  "pm.environment.set('staffToken', data.authData.accessToken);"
+                  "pm.environment.set('admin_token', data.authData.accessToken);",
+                  "pm.collectionVariables.set('admin_token', data.authData.accessToken);"
                 ]
               }
             }
@@ -364,7 +578,10 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -372,8 +589,16 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/auth/staff/login",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "auth", "staff", "login"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "staff",
+                "login"
+              ]
             }
           }
         },
@@ -397,17 +622,31 @@
           "request": {
             "method": "PATCH",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{staffToken}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
             ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"status\": \"FROZEN\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/api/v1/accounts/{{destAccountId}}/status",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "accounts", "{{destAccountId}}", "status"]
+              "raw": "{{baseUrl}}/api/v1/accounts/{{dest_account_id}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accounts",
+                "{{dest_account_id}}",
+                "status"
+              ]
             }
           }
         },
@@ -431,17 +670,31 @@
           "request": {
             "method": "PATCH",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{staffToken}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
             ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"status\": \"ACTIVE\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/api/v1/accounts/{{destAccountId}}/status",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "accounts", "{{destAccountId}}", "status"]
+              "raw": "{{baseUrl}}/api/v1/accounts/{{dest_account_id}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accounts",
+                "{{dest_account_id}}",
+                "status"
+              ]
             }
           }
         },
@@ -458,7 +711,8 @@
                   "});",
                   "var data = pm.response.json();",
                   "pm.expect(data.flagId).to.exist;",
-                  "pm.environment.set('activeFlagId', data.flagId);"
+                  "pm.environment.set('activeFlagId', data.flagId);",
+                  "pm.collectionVariables.set('activeFlagId', data.flagId);"
                 ]
               }
             }
@@ -466,17 +720,31 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{staffToken}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
             ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"reason\": \"Anti-Money Laundering (AML) Compliance Hold\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/api/v1/accounts/{{destAccountId}}/flags",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "accounts", "{{destAccountId}}", "flags"]
+              "raw": "{{baseUrl}}/api/v1/accounts/{{dest_account_id}}/flags",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accounts",
+                "{{dest_account_id}}",
+                "flags"
+              ]
             }
           }
         },
@@ -500,12 +768,24 @@
           "request": {
             "method": "DELETE",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{staffToken}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/accounts/{{destAccountId}}/flags/{{activeFlagId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "accounts", "{{destAccountId}}", "flags", "{{activeFlagId}}"]
+              "raw": "{{baseUrl}}/api/v1/accounts/{{dest_account_id}}/flags/{{activeFlagId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accounts",
+                "{{dest_account_id}}",
+                "flags",
+                "{{activeFlagId}}"
+              ]
             }
           }
         }
@@ -527,7 +807,8 @@
                   "});",
                   "var data = pm.response.json();",
                   "pm.expect(data.kycRequestId).to.exist;",
-                  "pm.environment.set('kycRejectId', data.kycRequestId);"
+                  "pm.environment.set('kycRejectId', data.kycRequestId);",
+                  "pm.collectionVariables.set('kycRejectId', data.kycRequestId);"
                 ]
               }
             }
@@ -535,8 +816,14 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -544,8 +831,16 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/customers/kyc/update-request",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "customers", "kyc", "update-request"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "customers",
+                "kyc",
+                "update-request"
+              ]
             }
           }
         },
@@ -570,8 +865,14 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{staffToken}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -579,8 +880,18 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/customers/kyc/update-requests/{{kycRejectId}}/reject",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "customers", "kyc", "update-requests", "{{kycRejectId}}", "reject"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "customers",
+                "kyc",
+                "update-requests",
+                "{{kycRejectId}}",
+                "reject"
+              ]
             }
           }
         },
@@ -596,7 +907,8 @@
                   "    pm.response.to.have.status(201);",
                   "});",
                   "var data = pm.response.json();",
-                  "pm.environment.set('zeroBalanceAccountId', data.accountId);"
+                  "pm.environment.set('zeroBalanceAccountId', data.accountId);",
+                  "pm.collectionVariables.set('zeroBalanceAccountId', data.accountId);"
                 ]
               }
             }
@@ -604,8 +916,14 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{staffToken}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -613,8 +931,14 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/accounts",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "accounts"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accounts"
+              ]
             }
           }
         },
@@ -630,7 +954,8 @@
                   "    pm.response.to.have.status(202);",
                   "});",
                   "var data = pm.response.json();",
-                  "pm.environment.set('closureRejectId', data.closureRequestId);"
+                  "pm.environment.set('closureRejectId', data.closureRequestId);",
+                  "pm.collectionVariables.set('closureRejectId', data.closureRequestId);"
                 ]
               }
             }
@@ -638,8 +963,14 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -647,8 +978,16 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/accounts/{{zeroBalanceAccountId}}/closure-request",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "accounts", "{{zeroBalanceAccountId}}", "closure-request"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accounts",
+                "{{zeroBalanceAccountId}}",
+                "closure-request"
+              ]
             }
           }
         },
@@ -673,8 +1012,14 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{staffToken}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -682,8 +1027,17 @@
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/accounts/closure-requests/{{closureRejectId}}/reject",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "accounts", "closure-requests", "{{closureRejectId}}", "reject"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accounts",
+                "closure-requests",
+                "{{closureRejectId}}",
+                "reject"
+              ]
             }
           }
         }
@@ -712,12 +1066,22 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/api/v1/notifications/unread-count",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "notifications", "unread-count"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "unread-count"
+              ]
             }
           }
         },
@@ -736,6 +1100,7 @@
                   "var items = data.content || data;",
                   "if (items.length > 0) {",
                   "    pm.environment.set('notifToReadId', items[0].notificationId || items[0].id);",
+                  "    pm.collectionVariables.set('notifToReadId', items[0].notificationId || items[0].id);",
                   "}"
                 ]
               }
@@ -744,15 +1109,31 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/api/v1/notifications/my-notifications?page=0&size=5",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "notifications", "my-notifications"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "my-notifications"
+              ],
               "query": [
-                { "key": "page", "value": "0" },
-                { "key": "size", "value": "5" }
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "5"
+                }
               ]
             }
           }
@@ -777,12 +1158,23 @@
           "request": {
             "method": "PATCH",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/api/v1/notifications/{{notifToReadId}}/read",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "notifications", "{{notifToReadId}}", "read"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "{{notifToReadId}}",
+                "read"
+              ]
             }
           }
         }

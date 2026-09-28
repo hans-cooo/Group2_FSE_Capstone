@@ -178,25 +178,74 @@ python ./scripts/demo_golden_path.py
 
 ---
 
-## 7. Postman Test Suite & Newman Automated Testing
+## 7. Automated Test Suites & Postman Collections
 
-A complete enterprise-grade Postman collection and environment suite is included in [`postman/`](file:///d:/Fullstack/Capstone-dev/postman):
+The repository provides two test execution methods for validating platform reliability, business invariants, security controls, and lifecycle transitions: **native PowerShell CLI runners** (no external npm dependencies required) and **Postman Collections (via Postman Desktop or Newman CLI)**.
 
-- **Collection:** [`postman/CooBS_Core_Banking.postman_collection.json`](file:///d:/Fullstack/Capstone-dev/postman/CooBS_Core_Banking.postman_collection.json) (25 test cases across 6 folders)
-- **Environment:** [`postman/CooBS_Local.postman_environment.json`](file:///d:/Fullstack/Capstone-dev/postman/CooBS_Local.postman_environment.json)
-- **Comprehensive Guide:** [`docs/POSTMAN_TEST_SUITE_GUIDE.md`](file:///d:/Fullstack/Capstone-dev/docs/POSTMAN_TEST_SUITE_GUIDE.md)
+### Available Test Suites & What They Do
 
-### Running via Postman Desktop:
-1. Import both JSON files into Postman.
-2. Select the `CooBS Local (Docker Gateway)` environment.
-3. Run the collection to verify all 25 assertions with real-time token capture and dynamic balance checks.
+| Test Suite | PowerShell Script | Postman Collection JSON | Key Validations & Invariants Covered |
+| :--- | :--- | :--- | :--- |
+| **CooBS Core Banking API** | [`scripts/test_api_endpoints.ps1`](scripts/test_api_endpoints.ps1) | [`postman/CooBS_Core_Banking.postman_collection.json`](postman/CooBS_Core_Banking.postman_collection.json) | **13-Point Platform Operational Health & Transfer Flow**:<br>• Gateway health check (`/actuator/health`) and dynamic route discovery.<br>• Customer & Staff (Admin/Teller) JWT token authentication and claim extraction.<br>• Account discovery & Redis-cached balance lookups.<br>• Atomic double-entry transfer execution with balance mutation.<br>• Sub-2ms Redis mutex idempotency replay verification.<br>• Overdraft invariant guard (`HTTP 422 INSUFFICIENT_FUNDS`).<br>• Kafka event-driven notification dispatch & consumption.<br>• PostgreSQL audit statement retrieval and SHA-256 cryptographic chain verification. |
+| **User Lifecycle Flow** | [`scripts/test_user_lifecycle_flow.ps1`](scripts/test_user_lifecycle_flow.ps1) | [`postman/User_Lifecycle_Flow.postman_collection.json`](postman/User_Lifecycle_Flow.postman_collection.json) | **8-Stage End-to-End Customer Lifecycle Journey**:<br>1. Register brand-new customer with dynamic credentials.<br>2. Customer login and JWT bearer acquisition.<br>3. Customer submits initial KYC identity verification.<br>4. Teller login (`teller_alice`) & savings account provisioning.<br>5. Customer submits KYC change/update request.<br>6. Admin login (`admin`) & approval of KYC update.<br>7. Customer submits account closure request.<br>8. Admin approves account closure & transitions status to `CLOSED`. |
+| **Edge Cases & Compliance** | [`scripts/test_edge_cases_and_compliance.ps1`](scripts/test_edge_cases_and_compliance.ps1) | [`postman/CooBS_Edge_Cases_And_Compliance.postman_collection.json`](postman/CooBS_Edge_Cases_And_Compliance.postman_collection.json) | **14 Negative-Testing, Invariant Guard & Rejection Workflows**:<br>• **RBAC Security Guard**: Customers attempting to access staff endpoints are blocked (`HTTP 403 Forbidden`).<br>• **Token Blacklist**: Token revocation (`POST /token/revoke`) and immediate reuse blocked via Redis (`HTTP 401 Unauthorized`).<br>• **Transfer Invariants**: Self-transfer rejected (`HTTP 400`), missing `Idempotency-Key` rejected (`HTTP 400`), non-positive/zero amount rejected (`HTTP 400`), non-existent account rejected (`HTTP 404`).<br>• **Compliance Guard**: Non-zero balance account closure rejected (`HTTP 400`).<br>• **Account Status Controls**: Freezing and unfreezing accounts (`FROZEN` <-> `ACTIVE`).<br>• **Risk Controls**: Imposing risk flags/holds on accounts and lifting them.<br>• **Administrative Rejections**: KYC update request rejected (`REJECTED`) and account closure rejected (`REJECTED`) with audit reasons.<br>• **Notification State**: Marking in-app notification as read (`PATCH /read`). |
 
-### Running via Newman CLI (Automated CI/CD):
+---
+
+### Running via PowerShell
+
+You can execute each test suite individually or run all three consecutively from the workspace root in PowerShell:
+
+#### 1. CooBS Core Banking API Test Suite:
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/test_api_endpoints.ps1
+```
+
+#### 2. User Lifecycle Flow Test Suite:
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/test_user_lifecycle_flow.ps1
+```
+
+#### 3. Edge Cases & Compliance Guard Test Suite:
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/test_edge_cases_and_compliance.ps1
+```
+
+#### Run All 3 Suites Sequentially:
+```powershell
+powershell -ExecutionPolicy Bypass -Command "& 'scripts/test_api_endpoints.ps1'; & 'scripts/test_user_lifecycle_flow.ps1'; & 'scripts/test_edge_cases_and_compliance.ps1'"
+```
+
+*(Note: Pass `-GatewayUrl http://<host>:<port>` if targeting an environment other than default `http://localhost:8080`.)*
+
+---
+
+### Running via Newman CLI (Automated CI/CD)
+
+All Postman collections use the shared environment [`postman/CooBS_Local.postman_environment.json`](postman/CooBS_Local.postman_environment.json):
+
 ```bash
+# 1. CooBS Core Banking
 newman run postman/CooBS_Core_Banking.postman_collection.json \
   -e postman/CooBS_Local.postman_environment.json \
   --delay-request 100
+
+# 2. User Lifecycle Flow
+newman run postman/User_Lifecycle_Flow.postman_collection.json \
+  -e postman/CooBS_Local.postman_environment.json \
+  --delay-request 100
+
+# 3. CooBS Edge Cases & Compliance
+newman run postman/CooBS_Edge_Cases_And_Compliance.postman_collection.json \
+  -e postman/CooBS_Local.postman_environment.json \
+  --delay-request 100
 ```
+
+### Running via Postman Desktop:
+1. Import the desired collection JSON files from [`postman/`](postman) into Postman.
+2. Import the environment file [`postman/CooBS_Local.postman_environment.json`](postman/CooBS_Local.postman_environment.json).
+3. Select the `CooBS Local (Docker Gateway)` environment in Postman.
+4. Execute via the Collection Runner.
 
 ---
 
