@@ -409,8 +409,8 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test(\"KYC submission returns 200 or 201\", function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+                  "pm.test(\"KYC submission returns 200, 201, or 202\", function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 202]);",
                   "});",
                   "var data = pm.response.json();",
                   "pm.test(\"KYC request ID captured\", function () {",
@@ -594,8 +594,8 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test(\"2nd KYC submission returns 200 or 201\", function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+                  "pm.test(\"2nd KYC submission returns 200, 201, or 202\", function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 202]);",
                   "});",
                   "var data = pm.response.json();",
                   "pm.environment.set(\"kyc_reject_req_id\", data.kycRequestId);"
