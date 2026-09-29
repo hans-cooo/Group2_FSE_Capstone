@@ -51,13 +51,13 @@ def log_step(step_num, title):
     print(f"\n{BOLD}{MAGENTA}[Step {step_num}] {title}{RESET}")
 
 def log_pass(msg):
-    print(f"  {GREEN}✔ [PASS]{RESET} {msg}")
+    print(f"  {GREEN}[PASS]{RESET} {msg}")
 
 def log_warn(msg):
-    print(f"  {YELLOW}⚠ [WARN]{RESET} {msg}")
+    print(f"  {YELLOW}[WARN]{RESET} {msg}")
 
 def log_fail(msg):
-    print(f"  {RED}✘ [FAIL]{RESET} {msg}")
+    print(f"  {RED}[FAIL]{RESET} {msg}")
 
 def http_request(url, method="GET", headers=None, data=None):
     if headers is None:
@@ -82,7 +82,7 @@ def http_request(url, method="GET", headers=None, data=None):
             res_body = response.read().decode("utf-8")
             res_headers = dict(response.info())
             res_json = None
-            if "application/json" in res_headers.get("Content-Type", "") or "application/problem+json" in res_headers.get("Content-Type", ""):
+            if "json" in res_headers.get("Content-Type", "").lower():
                 try:
                     res_json = json.loads(res_body)
                 except Exception:
@@ -366,11 +366,12 @@ def main():
     # 7A. Attempt verification via API Gateway REST endpoint (/api/v1/audit/verify-chain)
     try:
         audit_headers = {
-            "Authorization": f"Bearer {admin_token}",
+            "Authorization": f"Bearer {access_token}",
             "Accept": "application/json"
         }
-        status, data = http_request(f"{args.gateway_url}/api/v1/audit/verify-chain/{account_id}", "GET", headers=audit_headers)
-        if status == 200 and isinstance(data, dict):
+        audit_res = http_request(f"{gw_url}/api/v1/audit/verify-chain/{source_account_id}", "GET", headers=audit_headers)
+        if audit_res["status"] == 200 and isinstance(audit_res["json"], dict):
+            data = audit_res["json"]
             log_pass("Audit Service REST Chain Verification Confirmed (via API Gateway):")
             print(f"     - Account ID:        {data.get('accountId')}")
             print(f"     - Records Verified:  {data.get('totalRecordsVerified')}")
@@ -380,12 +381,14 @@ def main():
             print(f"     - Verification Msg:  {data.get('message')}")
             summary_records.append(("7. Cryptographic Audit", "GET /api/v1/audit/verify-chain/{id}", 200, "REST Gateway", f"Chain Verified (Intact: {data.get('isChainIntact')})"))
             audit_verified = True
+        else:
+            log_warn(f"Audit REST endpoint returned {audit_res['status']} -> {audit_res['body']}")
     except Exception as e:
         log_warn(f"Audit Service REST endpoint unavailable or skipped ({e}). Falling back to direct database verification.")
 
     # 7B. Fallback to direct PostgreSQL audit store query
     if not audit_verified and not args.skip_containers:
-        audit_query = f"SELECT audit_id, transaction_id, transaction_type, amount, current_hash FROM audit_store.ledger_mutation_audit WHERE account_id = {account_id} ORDER BY audit_id DESC LIMIT 1;"
+        audit_query = f"SELECT audit_id, transaction_id, transaction_type, amount, current_hash FROM audit_store.ledger_mutation_audit WHERE account_id = {source_account_id} ORDER BY audit_id DESC LIMIT 1;"
         cmd = f'docker exec postgres-audit-db psql -U postgres -d audit_store -t -A -F "|" -c "{audit_query}"'
         stdout, code = run_command(cmd)
         if code == 0 and "|" in stdout:
@@ -415,8 +418,7 @@ def main():
     for step, endpoint, status, latency, details in summary_records:
         status_color = GREEN if str(status).startswith("2") else (YELLOW if status == "N/A" else RED)
         print(f"{step:<28} {endpoint:<40} {status_color}{status:<10}{RESET} {latency:<12} {details:<25}")
-    print("-" * 115)
-    print(f"\n{BOLD}{GREEN}✔ GOLDEN PATH DEMONSTRATION COMPLETE: ALL ARCHITECTURAL LAYERS VERIFIED.{RESET}\n")
+    print(f"\n{BOLD}{GREEN}[OK] GOLDEN PATH DEMONSTRATION COMPLETE: ALL ARCHITECTURAL LAYERS VERIFIED.{RESET}\n")
 
     return 0
 
