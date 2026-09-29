@@ -91,6 +91,9 @@ jobs:
           echo "Applying 04_seed_data.sql..."
           docker exec -i pg-ci psql -U postgres -d audit_store < database/postgres/04_seed_data.sql
 
+          echo "Applying 05_create_notifications.sql..."
+          docker exec -i pg-ci psql -U postgres -d audit_store < database/postgres/05_create_notifications.sql
+
       - name: Verify Single Source of Truth (SSOT) Isolation
         run: |
           SSOT_COUNT=$(docker exec pg-ci psql -U postgres -d audit_store -t -A -c "SELECT count(*) FROM information_schema.schemata WHERE schema_name = 'core_banking';")

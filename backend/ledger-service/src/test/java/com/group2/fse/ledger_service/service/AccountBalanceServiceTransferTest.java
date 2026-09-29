@@ -8,6 +8,7 @@ import com.group2.fse.ledger_service.dto.TransferResponseDto;
 import com.group2.fse.ledger_service.entity.Account;
 import com.group2.fse.ledger_service.entity.Balance;
 import com.group2.fse.ledger_service.entity.Transaction;
+import com.group2.fse.ledger_service.exception.AccountNotActiveException;
 import com.group2.fse.ledger_service.exception.AccountNotFoundException;
 import com.group2.fse.ledger_service.exception.DualWriteAuditException;
 import com.group2.fse.ledger_service.exception.InsufficientFundsException;
@@ -317,5 +318,44 @@ class AccountBalanceServiceTransferTest {
 
         verify(applicationEventPublisher, never()).publishEvent(any());
     }
-}
 
+    @Test
+    @DisplayName("Should reject transfer and throw AccountNotActiveException when source account is FROZEN")
+    void shouldRejectTransferWhenSourceAccountIsFrozen() {
+        sourceBalance.getAccount().setStatus("FROZEN");
+
+        TransferRequestDto request = TransferRequestDto.builder()
+                .sourceAccountId(10L)
+                .destinationAccountId(20L)
+                .amount(new BigDecimal("100.0000"))
+                .referenceNo("TRF-FROZEN-001")
+                .build();
+
+        when(balanceRepository.findByAccountId(10L)).thenReturn(Optional.of(sourceBalance));
+        when(balanceRepository.findByAccountId(20L)).thenReturn(Optional.of(destBalance));
+
+        assertThatThrownBy(() -> balanceService.executeTransfer(request, 1L, "127.0.0.1"))
+                .isInstanceOf(AccountNotActiveException.class)
+                .hasMessageContaining("FROZEN");
+    }
+
+    @Test
+    @DisplayName("Should reject transfer and throw AccountNotActiveException when destination account is FROZEN")
+    void shouldRejectTransferWhenDestinationAccountIsFrozen() {
+        destBalance.getAccount().setStatus("FROZEN");
+
+        TransferRequestDto request = TransferRequestDto.builder()
+                .sourceAccountId(10L)
+                .destinationAccountId(20L)
+                .amount(new BigDecimal("100.0000"))
+                .referenceNo("TRF-FROZEN-002")
+                .build();
+
+        when(balanceRepository.findByAccountId(10L)).thenReturn(Optional.of(sourceBalance));
+        when(balanceRepository.findByAccountId(20L)).thenReturn(Optional.of(destBalance));
+
+        assertThatThrownBy(() -> balanceService.executeTransfer(request, 1L, "127.0.0.1"))
+                .isInstanceOf(AccountNotActiveException.class)
+                .hasMessageContaining("FROZEN");
+    }
+}

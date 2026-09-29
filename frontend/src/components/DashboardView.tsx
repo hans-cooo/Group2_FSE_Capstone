@@ -156,8 +156,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   <span className="badge badge-info" style={{ fontSize: '11px' }}>
                     {account.accountType}
                   </span>
-                  <span className="badge badge-success" style={{ fontSize: '11px' }}>
-                    <span className="pulse-dot"></span>
+                  <span className={`badge ${account.status === 'ACTIVE' ? 'badge-success' : account.status === 'FROZEN' ? 'badge-danger' : 'badge-warning'}`} style={{ fontSize: '11px' }}>
+                    {account.status === 'ACTIVE' && <span className="pulse-dot"></span>}
                     {account.status}
                   </span>
                 </div>
@@ -186,11 +186,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <div style={{ marginTop: '16px', display: 'flex', gap: '8px' }}>
                   <button
                     onClick={() => onSelectTransfer(account.accountId)}
+                    disabled={account.status !== 'ACTIVE'}
                     className="btn btn-primary"
-                    style={{ flex: 1, padding: '8px 12px', fontSize: '12px' }}
+                    style={{ flex: 1, padding: '8px 12px', fontSize: '12px', opacity: account.status !== 'ACTIVE' ? 0.5 : 1, cursor: account.status !== 'ACTIVE' ? 'not-allowed' : 'pointer' }}
                   >
                     <ArrowUpRight size={14} />
-                    <span>Transfer Funds</span>
+                    <span>{account.status !== 'ACTIVE' ? `Account ${account.status}` : 'Transfer Funds'}</span>
                   </button>
                 </div>
               </div>

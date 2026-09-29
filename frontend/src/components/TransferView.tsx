@@ -52,6 +52,8 @@ export const TransferView: React.FC<TransferViewProps> = ({
   const destAccount = accounts.find(a => a.accountId === destAccountId);
   const numAmount = parseFloat(amount) || 0;
   const isInsufficient = sourceAccount ? sourceAccount.balance < numAmount : false;
+  const isSourceInactive = Boolean(sourceAccount && sourceAccount.status && sourceAccount.status !== 'ACTIVE');
+  const isDestInactive = Boolean(destAccount && destAccount.status && destAccount.status !== 'ACTIVE');
 
   const handleRefreshKeys = () => {
     setIdempotencyKey(generateUuid());
@@ -76,6 +78,14 @@ export const TransferView: React.FC<TransferViewProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSourceInactive) {
+      setErrorMessage(`Source account is ${sourceAccount?.status}. Transfers are prohibited.`);
+      return;
+    }
+    if (isDestInactive) {
+      setErrorMessage(`Destination account is ${destAccount?.status}. Transfers to frozen or closed accounts are prohibited.`);
+      return;
+    }
     if (sourceAccountId === destAccountId) {
       setErrorMessage('Source and Destination accounts must be distinct accounts.');
       return;
@@ -149,11 +159,14 @@ export const TransferView: React.FC<TransferViewProps> = ({
                 value={sourceAccountId}
                 onChange={(e) => setSourceAccountId(Number(e.target.value))}
               >
-                {accounts.map(a => (
-                  <option key={a.accountId} value={a.accountId}>
-                    {a.customerName ? `[${a.customerName}] ` : ''}{a.accountType} - {a.accountNumber} (₱{a.balance.toFixed(2)})
-                  </option>
-                ))}
+                {accounts.map(a => {
+                  const isInactive = a.status && a.status !== 'ACTIVE';
+                  return (
+                    <option key={a.accountId} value={a.accountId} disabled={isInactive}>
+                      {a.customerName ? `[${a.customerName}] ` : ''}{a.accountType} - {a.accountNumber} (₱{a.balance.toFixed(2)}){isInactive ? ` [${a.status}]` : ''}
+                    </option>
+                  );
+                })}
               </select>
             </div>
 
@@ -172,11 +185,14 @@ export const TransferView: React.FC<TransferViewProps> = ({
                 value={destAccountId}
                 onChange={(e) => setDestAccountId(Number(e.target.value))}
               >
-                {accounts.map(a => (
-                  <option key={a.accountId} value={a.accountId} disabled={a.accountId === sourceAccountId}>
-                    {a.customerName ? `[${a.customerName}] ` : ''}{a.accountType} - {a.accountNumber} (₱{a.balance.toFixed(2)})
-                  </option>
-                ))}
+                {accounts.map(a => {
+                  const isInactive = a.status && a.status !== 'ACTIVE';
+                  return (
+                    <option key={a.accountId} value={a.accountId} disabled={a.accountId === sourceAccountId || isInactive}>
+                      {a.customerName ? `[${a.customerName}] ` : ''}{a.accountType} - {a.accountNumber} (₱{a.balance.toFixed(2)}){isInactive ? ` [${a.status}]` : ''}
+                    </option>
+                  );
+                })}
               </select>
             </div>
 
@@ -244,7 +260,7 @@ export const TransferView: React.FC<TransferViewProps> = ({
             {/* Submit Button */}
             <button
               type="submit"
-              disabled={isSubmitting || isInsufficient || sourceAccountId === destAccountId}
+              disabled={isSubmitting || isInsufficient || sourceAccountId === destAccountId || isSourceInactive || isDestInactive}
               className="btn btn-primary"
               style={{ width: '100%', padding: '14px', fontSize: '15px', marginTop: '12px' }}
             >

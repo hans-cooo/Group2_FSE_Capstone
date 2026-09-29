@@ -13,6 +13,7 @@ import com.group2.fse.ledger_service.entity.User;
 import com.group2.fse.ledger_service.event.LedgerMutationEvent;
 import com.group2.fse.ledger_service.event.LedgerTransferEvent;
 import com.group2.fse.ledger_service.event.LedgerTransferFailedEvent;
+import com.group2.fse.ledger_service.exception.AccountNotActiveException;
 import com.group2.fse.ledger_service.exception.AccountNotFoundException;
 import com.group2.fse.ledger_service.exception.InsufficientFundsException;
 import com.group2.fse.ledger_service.exception.InvalidTransactionException;
@@ -251,6 +252,17 @@ public class AccountBalanceServiceImpl implements AccountBalanceService {
             Balance sourceBalance = srcId.equals(firstId) ? firstBalance : secondBalance;
             Balance destinationBalance = dstId.equals(firstId) ? firstBalance : secondBalance;
 
+            // Status invariants: Reject transfers if either source or destination account is not ACTIVE (e.g. FROZEN, CLOSED)
+            if (sourceBalance.getAccount() != null && sourceBalance.getAccount().getStatus() != null &&
+                    !"ACTIVE".equalsIgnoreCase(sourceBalance.getAccount().getStatus())) {
+                throw new AccountNotActiveException(srcId, sourceBalance.getAccount().getStatus());
+            }
+
+            if (destinationBalance.getAccount() != null && destinationBalance.getAccount().getStatus() != null &&
+                    !"ACTIVE".equalsIgnoreCase(destinationBalance.getAccount().getStatus())) {
+                throw new AccountNotActiveException(dstId, destinationBalance.getAccount().getStatus());
+            }
+
             if (sourceBalance.getAccount() != null && sourceBalance.getAccount().getCustomer() != null) {
                 srcCustId = sourceBalance.getAccount().getCustomer().getCustomerId();
             }
@@ -405,6 +417,9 @@ public class AccountBalanceServiceImpl implements AccountBalanceService {
         balanceRepository.save(balance);
 
         Account account = balance.getAccount() != null ? balance.getAccount() : Account.builder().accountId(accountId).build();
+        if (account != null && account.getStatus() != null && !"ACTIVE".equalsIgnoreCase(account.getStatus())) {
+            throw new AccountNotActiveException(accountId, account.getStatus());
+        }
         Transaction txn = Transaction.builder()
                 .account(account)
                 .referenceNo(ref)
@@ -468,6 +483,9 @@ public class AccountBalanceServiceImpl implements AccountBalanceService {
         balanceRepository.save(balance);
 
         Account account = balance.getAccount() != null ? balance.getAccount() : Account.builder().accountId(accountId).build();
+        if (account != null && account.getStatus() != null && !"ACTIVE".equalsIgnoreCase(account.getStatus())) {
+            throw new AccountNotActiveException(accountId, account.getStatus());
+        }
         Transaction txn = Transaction.builder()
                 .account(account)
                 .referenceNo(ref)
