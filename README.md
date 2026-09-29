@@ -307,6 +307,41 @@ While the automated test suites assert Kafka event delivery directly by querying
 
 ---
 
+### Performance & High-Concurrency Load Testing (Apache JMeter)
+
+The platform includes an automated Apache JMeter performance testing suite ([`test/jmeter-load-test.jmx`](test/jmeter-load-test.jmx)) simulating continuous retail banking traffic against the Edge API Gateway.
+
+#### Features & Architectural Safeguards:
+- **Dynamic JWT Acquisition**: Virtual users authenticate via `POST /api/v1/auth/customers/login` and dynamically extract Bearer tokens.
+- **Safe Closed-Loop "Ping-Pong" Balance Equilibrium**: Symmetrically alternates transfers between Account 1 and Account 2 (1.00 PHP nominal amount) to prevent balance exhaustion during high concurrency.
+- **Traffic Composition**: 40% Account Portfolio Inquiries, 30% Real-Time Balance Queries, 20% Double-Entry Transfers (Ping-Pong), 10% Notification Feeds.
+- **Gateway Rate-Limiter Pacing**: Uses Gaussian random timers (200–400ms delay) to stay aligned with Redis token bucket rate limiters.
+- **SLA Assertions**: Automated response code checks (`200 OK`, `201 Created`) and response time assertions (< 3000 ms).
+
+#### Running the Load Test:
+
+```powershell
+# 1. Automated Headless Runner (Default: 5 virtual users, 60s execution):
+.\scripts\run_jmeter_test.ps1
+
+# 2. Custom load test with automatic HTML report launch:
+.\scripts\run_jmeter_test.ps1 -Threads 10 -Duration 120 -Report
+
+# 3. Interactive JMeter GUI mode:
+.\scripts\run_jmeter_test.ps1 -Gui
+```
+
+#### Native JMeter CLI:
+```bash
+jmeter -n -t test/jmeter-load-test.jmx \
+  -l test/results/results.jtl \
+  -e -o test/results/html-report \
+  -JTHREADS=5 -JDURATION=60 -JSLA_MS=3000
+```
+Interactive HTML dashboard reports are generated under `test/results/html-report/index.html`. For full details, see [`test/README.md`](test/README.md).
+
+---
+
 ## 8. Enterprise Observability Tier (Prometheus, Grafana, Loki & Promtail)
 
 The platform includes a pre-configured, production-grade observability stack fulfilling **ADR-09 (Prometheus)**, **ADR-10 (Grafana)**, **ADR-11 (Distributed Tracing)**, and centralized container log aggregation:
