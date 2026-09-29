@@ -54,7 +54,10 @@ public class AuditQueryServiceImpl implements AuditQueryService {
                 .amount(audit.getAmount())
                 .oldBalance(audit.getOldBalance())
                 .newBalance(audit.getNewBalance())
+                .previousHash(audit.getPreviousHash())
                 .currentHash(audit.getCurrentHash())
+                .actorId(audit.getActorId())
+                .clientIp(audit.getClientIp())
                 .eventTimestamp(audit.getEventTimestamp())
                 .build());
     }
