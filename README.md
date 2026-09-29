@@ -73,6 +73,11 @@ flowchart TB
 | **`redis-cache`**          | Redis 7.4 Alpine             |     `6379`      | `db 0`                  | _(none)_      | Sub-2ms distributed idempotency pre-flight locks (`SETNX`) & balance cache                 |
 | **`kafka-broker`**         | Apache Kafka 3.8 (KRaft)     |     `9092`      | _(broker)_              | _(plaintext)_ | Enterprise event streaming backbone (`transfer-events`, `ledger.mutation.completed.v1`)    |
 | **`kafka-ui`**             | Provectus Kafka UI           |     `8088`      | `local-cluster`         | _(web)_       | Visual browser dashboard for topics, messages, offsets, and consumer groups                |
+| **`prometheus`**           | Prometheus v2.50             |     `9090`      | `prometheus_data`       | _(none)_      | Time-series scraper (5s interval), alerts, PromQL metrics engine                            |
+| **`grafana`**              | Grafana 10.3                 |     `3001`      | `grafana_data`          | Anonymous     | Unified command center with auto-provisioned SLA & Centralized Log dashboards               |
+| **`loki`**                 | Grafana Loki 2.9             |     `3100`      | `loki_data`             | _(none)_      | Log aggregation engine with TSDB schema v13 and multi-tenant filesystem chunk storage       |
+| **`promtail`**             | Grafana Promtail 2.9         |     `9080`      | N/A                     | Docker Socket | Container log collector with multiline Java stack trace aggregation & level tagging         |
+| **`jaeger`**               | Jaeger All-in-One 1.57       | `16686` / `4318` | In-Memory               | _(none)_      | Distributed tracing UI and OpenTelemetry (OTLP) span collector                             |
 
 ---
 
@@ -302,22 +307,26 @@ While the automated test suites assert Kafka event delivery directly by querying
 
 ---
 
-## 8. Enterprise Observability Tier (Prometheus & Grafana)
+## 8. Enterprise Observability Tier (Prometheus, Grafana, Loki & Promtail)
 
-The platform includes a pre-configured, production-grade observability stack fulfilling **ADR-09 (Prometheus)** and **ADR-10 (Grafana)**:
+The platform includes a pre-configured, production-grade observability stack fulfilling **ADR-09 (Prometheus)**, **ADR-10 (Grafana)**, **ADR-11 (Distributed Tracing)**, and centralized container log aggregation:
 
-- **Grafana Operational Command Center:** [`http://localhost:3001`](http://localhost:3001) (Pre-provisioned dashboard: _CooBS Core Banking — Operational Command Center_)
+- **Grafana Operational Command Center:** [`http://localhost:3001`](http://localhost:3001)
+  - Dashboard 1: _CooBS Core Banking — Operational Command Center_ (Real-time TPS, P99 Latency SLA, HikariCP pools, JVM metrics)
+  - Dashboard 2: _CooBS Core Banking — Centralized Log Stream & Error Inspector_ (Loki real-time log streaming, log velocity, error tracking, and domain feeds)
 - **Prometheus Server & Metrics Console:** [`http://localhost:9090`](http://localhost:9090) (Scrapes all 6 Spring Boot microservices every 5 seconds)
-- **Detailed Runbook & Metric Dictionary:** [`docs/ENTERPRISE_OBSERVABILITY_GUIDE.md`](file:///d:/Fullstack/Capstone-dev/docs/ENTERPRISE_OBSERVABILITY_GUIDE.md)
+- **Loki Log Engine & Promtail:** [`http://localhost:3100`](http://localhost:3100) (Ingests all container logs via Docker socket with multiline Java stack trace grouping)
+- **Jaeger Distributed Tracing:** [`http://localhost:16686`](http://localhost:16686) (Visualizes inter-service request waterfall and latencies)
+- **Detailed Runbook & Metric/Log Dictionary:** [`docs/docs-services/ENTERPRISE_OBSERVABILITY_GUIDE.md`](file:///d:/Fullstack/Capstone-dev/docs/docs-services/ENTERPRISE_OBSERVABILITY_GUIDE.md)
 
 ### Launching Observability Stack:
 
 ```powershell
-# Start Prometheus and Grafana alongside existing core services
-docker compose --profile observability up -d
+# Start Prometheus, Grafana, Loki, and Promtail alongside core services
+docker compose --profile app --profile observability up -d
 
 # Verify container status
-docker compose ps prometheus grafana
+docker compose ps prometheus grafana loki promtail jaeger
 ```
 
 ---
