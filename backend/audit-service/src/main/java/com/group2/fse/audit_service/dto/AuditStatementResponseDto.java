@@ -21,6 +21,9 @@ public class AuditStatementResponseDto {
     private BigDecimal amount;
     private BigDecimal oldBalance;
     private BigDecimal newBalance;
+    private String previousHash;
     private String currentHash;
+    private Long actorId;
+    private String clientIp;
     private LocalDateTime eventTimestamp;
 }

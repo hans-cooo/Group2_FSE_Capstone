@@ -464,7 +464,7 @@ class ApiClient {
   public async getAccountAuditStatements(accountId: number): Promise<AuditRecord[]> {
     try {
       await this.ensureLiveSession();
-      const res = await fetch(`/api/v1/audit/accounts/${accountId}/statement?page=0&size=50&sort=eventTimestamp,desc`, {
+      const res = await fetch(`/api/v1/audit/accounts/${accountId}/statement?page=0&size=50&sort=auditId,asc`, {
         headers: {
           'Authorization': `Bearer ${this.session?.accessToken || ''}`,
           'X-Correlation-ID': this.generateUuid()
@@ -473,8 +473,27 @@ class ApiClient {
       if (res.ok) {
         const data = await res.json();
         const records = data.content || data;
-        if (Array.isArray(records) && records.length > 0) {
-          return records;
+        if (Array.isArray(records)) {
+          if (records.length > 0) {
+            return records
+              .map((r: any) => ({
+                auditId: Number(r.auditId || 0),
+                transactionId: Number(r.transactionId || 0),
+                accountId: Number(r.accountId || accountId),
+                referenceNo: r.referenceNo || `TXN-${r.transactionId || ''}`,
+                transactionType: r.transactionType || 'TRANSACTION',
+                amount: Number(r.amount || 0),
+                oldBalance: Number(r.oldBalance || 0),
+                newBalance: Number(r.newBalance || 0),
+                previousHash: r.previousHash || '',
+                currentHash: r.currentHash || '',
+                actorId: r.actorId ? Number(r.actorId) : undefined,
+                clientIp: r.clientIp || undefined,
+                eventTimestamp: r.eventTimestamp || new Date().toISOString()
+              }))
+              .sort((a, b) => a.auditId - b.auditId);
+          }
+          return [];
         }
       }
     } catch {
@@ -493,7 +512,15 @@ class ApiClient {
         }
       });
       if (res.ok) {
-        return await res.json();
+        const data = await res.json();
+        return {
+          accountId: data.accountId ?? accountId,
+          totalRecordsVerified: Number(data.totalRecordsVerified ?? 0),
+          isChainIntact: Boolean(data.isChainIntact),
+          latestHash: data.latestHash || undefined,
+          verifiedAt: data.verifiedAt || new Date().toISOString(),
+          message: data.message || 'Chain verification completed.'
+        };
       }
     } catch {
       // Fallback to local chain verification

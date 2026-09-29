@@ -7,21 +7,32 @@ interface AuditViewProps {
   accounts: Account[];
 }
 
-export const AuditView: React.FC<AuditViewProps> = ({ accounts }) => {
-  const [selectedAccountId, setSelectedAccountId] = useState<number>(accounts[0]?.accountId || 1);
+export const AuditView: React.FC<AuditViewProps> = ({ accounts = [] }) => {
+  const [selectedAccountId, setSelectedAccountId] = useState<number>(accounts?.[0]?.accountId || 1);
   const [auditRecords, setAuditRecords] = useState<AuditRecord[]>([]);
   const [verificationResult, setVerificationResult] = useState<ChainVerificationResult | null>(null);
   const [isVerifying, setIsVerifying] = useState<boolean>(false);
   const [selectedRecord, setSelectedRecord] = useState<AuditRecord | null>(null);
 
+  useEffect(() => {
+    if (accounts && accounts.length > 0 && !accounts.some(a => a.accountId === selectedAccountId)) {
+      setSelectedAccountId(accounts[0].accountId);
+    }
+  }, [accounts, selectedAccountId]);
+
   const loadAuditData = useCallback(async (accId: number) => {
-    const records = await apiClient.getAccountAuditStatements(accId);
-    setAuditRecords(records);
-    // Auto-run verification
     setIsVerifying(true);
-    const result = await apiClient.verifyAuditChain(accId);
-    setVerificationResult(result);
-    setIsVerifying(false);
+    try {
+      const records = await apiClient.getAccountAuditStatements(accId);
+      setAuditRecords(Array.isArray(records) ? records : []);
+      // Auto-run verification
+      const result = await apiClient.verifyAuditChain(accId);
+      setVerificationResult(result);
+    } catch (err) {
+      console.error('Failed to load audit data:', err);
+    } finally {
+      setIsVerifying(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -32,32 +43,47 @@ export const AuditView: React.FC<AuditViewProps> = ({ accounts }) => {
 
   const handleVerifyChain = async () => {
     setIsVerifying(true);
-    const result = await apiClient.verifyAuditChain(selectedAccountId);
-    setVerificationResult(result);
-    setIsVerifying(false);
+    try {
+      const result = await apiClient.verifyAuditChain(selectedAccountId);
+      setVerificationResult(result);
+    } catch (err) {
+      console.error('Failed to verify chain:', err);
+    } finally {
+      setIsVerifying(false);
+    }
   };
 
   const handleSimulateTamper = async () => {
     apiClient.simulateTampering(selectedAccountId);
     const records = await apiClient.getAccountAuditStatements(selectedAccountId);
-    setAuditRecords([...records]);
+    setAuditRecords(Array.isArray(records) ? [...records] : []);
     setIsVerifying(true);
-    const result = await apiClient.verifyAuditChain(selectedAccountId);
-    setVerificationResult(result);
-    setIsVerifying(false);
+    try {
+      const result = await apiClient.verifyAuditChain(selectedAccountId);
+      setVerificationResult(result);
+    } catch (err) {
+      console.error('Failed to verify chain after tamper:', err);
+    } finally {
+      setIsVerifying(false);
+    }
   };
 
   const handleRestoreChain = async () => {
     apiClient.restoreIntactChain(selectedAccountId);
     const records = await apiClient.getAccountAuditStatements(selectedAccountId);
-    setAuditRecords([...records]);
+    setAuditRecords(Array.isArray(records) ? [...records] : []);
     setIsVerifying(true);
-    const result = await apiClient.verifyAuditChain(selectedAccountId);
-    setVerificationResult(result);
-    setIsVerifying(false);
+    try {
+      const result = await apiClient.verifyAuditChain(selectedAccountId);
+      setVerificationResult(result);
+    } catch (err) {
+      console.error('Failed to verify chain after restore:', err);
+    } finally {
+      setIsVerifying(false);
+    }
   };
 
-  const selectedAccount = accounts.find(a => a.accountId === selectedAccountId) || accounts[0];
+  const selectedAccount = (accounts || []).find(a => a.accountId === selectedAccountId) || accounts?.[0];
 
   return (
     <div style={{ maxWidth: '1320px', margin: '0 auto', width: 'calc(100% - 32px)', display: 'flex', flexDirection: 'column', gap: '28px' }}>
@@ -154,8 +180,11 @@ export const AuditView: React.FC<AuditViewProps> = ({ accounts }) => {
         {/* Left: Account selector */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-muted)' }}>Target Account:</span>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            {accounts.map(acc => (
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            {(!accounts || accounts.length === 0) && (
+              <span style={{ fontSize: '12px', color: 'var(--text-subtle)' }}>No accounts available</span>
+            )}
+            {(accounts || []).map(acc => (
               <button
                 key={acc.accountId}
                 onClick={() => setSelectedAccountId(acc.accountId)}
@@ -304,7 +333,7 @@ export const AuditView: React.FC<AuditViewProps> = ({ accounts }) => {
             <div>
               <div style={{ color: 'var(--text-subtle)', fontSize: '11px' }}>VERIFIED BLOCKS</div>
               <div style={{ fontSize: '16px', fontWeight: '700', color: '#ffffff', marginTop: '2px' }}>
-                {verificationResult.totalRecordsVerified} records
+                {verificationResult.totalRecordsVerified ?? 0} records
               </div>
             </div>
             <div>
@@ -329,108 +358,128 @@ export const AuditView: React.FC<AuditViewProps> = ({ accounts }) => {
           gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
           gap: '16px'
         }}>
-          {auditRecords.map((record, index) => {
-            const isGenesis = index === 0 && record.previousHash.startsWith('00000000');
-            const isBroken = index > 0 && record.previousHash !== auditRecords[index - 1].currentHash;
+          {(!auditRecords || auditRecords.length === 0) ? (
+            <div style={{
+              gridColumn: '1 / -1',
+              padding: '36px',
+              textAlign: 'center',
+              background: 'rgba(15, 23, 42, 0.5)',
+              borderRadius: '14px',
+              border: '1px dashed var(--border-subtle)',
+              color: 'var(--text-subtle)',
+              fontSize: '13px'
+            }}>
+              No cryptographic mutation blocks recorded for this account.
+            </div>
+          ) : (
+            auditRecords.map((record, index) => {
+              const prevHashStr = record?.previousHash || '';
+              const currHashStr = record?.currentHash || '';
+              const isGenesis = index === 0 && (prevHashStr.startsWith('00000000') || !prevHashStr);
+              const prevBlockCurrHash = index > 0 ? (auditRecords[index - 1]?.currentHash || '') : '';
+              const isBroken = index > 0 && !!prevHashStr && !!prevBlockCurrHash && prevHashStr !== prevBlockCurrHash;
+              const txnType = record?.transactionType || 'TRANSACTION';
+              const isCredit = txnType.includes('DEPOSIT') || txnType.includes('CREDIT');
 
-            return (
-              <div
-                key={record.auditId}
-                onClick={() => setSelectedRecord(record)}
-                style={{
-                  background: isBroken ? 'rgba(244, 63, 94, 0.08)' : 'rgba(15, 23, 42, 0.65)',
-                  border: `1px solid ${isBroken ? 'rgba(244, 63, 94, 0.5)' : 'var(--border-subtle)'}`,
-                  borderRadius: '14px',
-                  padding: '18px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '12px',
-                  cursor: 'pointer',
-                  position: 'relative',
-                  transition: 'all 0.2s ease',
-                  backdropFilter: 'blur(10px)'
-                }}
-              >
-                {/* Block header */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              return (
+                <div
+                  key={record?.auditId || index}
+                  onClick={() => setSelectedRecord(record)}
+                  style={{
+                    background: isBroken ? 'rgba(244, 63, 94, 0.08)' : 'rgba(15, 23, 42, 0.65)',
+                    border: `1px solid ${isBroken ? 'rgba(244, 63, 94, 0.5)' : 'var(--border-subtle)'}`,
+                    borderRadius: '14px',
+                    padding: '18px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px',
+                    cursor: 'pointer',
+                    position: 'relative',
+                    transition: 'all 0.2s ease',
+                    backdropFilter: 'blur(10px)'
+                  }}
+                >
+                  {/* Block header */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{
+                        fontSize: '11px',
+                        fontWeight: '700',
+                        padding: '2px 8px',
+                        borderRadius: '6px',
+                        background: isGenesis ? 'rgba(56, 189, 248, 0.2)' : 'rgba(2, 6, 23, 0.6)',
+                        color: isGenesis ? 'var(--accent-cyan)' : '#ffffff',
+                        border: '1px solid var(--border-subtle)'
+                      }}>
+                        {isGenesis ? 'GENESIS BLOCK #1' : `BLOCK #${index + 1}`}
+                      </span>
+                      <span style={{ fontSize: '11px', color: 'var(--text-subtle)' }}>
+                        Audit ID: {record?.auditId ?? 'N/A'}
+                      </span>
+                    </div>
+
                     <span style={{
                       fontSize: '11px',
                       fontWeight: '700',
-                      padding: '2px 8px',
-                      borderRadius: '6px',
-                      background: isGenesis ? 'rgba(56, 189, 248, 0.2)' : 'rgba(2, 6, 23, 0.6)',
-                      color: isGenesis ? 'var(--accent-cyan)' : '#ffffff',
-                      border: '1px solid var(--border-subtle)'
+                      color: isCredit ? 'var(--color-success)' : 'var(--accent-indigo)'
                     }}>
-                      {isGenesis ? 'GENESIS BLOCK #1' : `BLOCK #${index + 1}`}
-                    </span>
-                    <span style={{ fontSize: '11px', color: 'var(--text-subtle)' }}>
-                      Audit ID: {record.auditId}
+                      {txnType}
                     </span>
                   </div>
 
-                  <span style={{
+                  {/* Amount and balance */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                    <span style={{ fontSize: '18px', fontWeight: '800', color: '#ffffff' }}>
+                      ₱{Number(record?.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    </span>
+                    <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                      Bal: ₱{Number(record?.newBalance || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+
+                  {/* Hash Links */}
+                  <div style={{
+                    background: 'rgba(2, 6, 23, 0.7)',
+                    borderRadius: '8px',
+                    padding: '10px',
+                    fontFamily: 'var(--font-mono)',
                     fontSize: '11px',
-                    fontWeight: '700',
-                    color: record.transactionType.includes('DEPOSIT') || record.transactionType.includes('CREDIT') ? 'var(--color-success)' : 'var(--accent-indigo)'
-                  }}>
-                    {record.transactionType}
-                  </span>
-                </div>
-
-                {/* Amount and balance */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                  <span style={{ fontSize: '18px', fontWeight: '800', color: '#ffffff' }}>
-                    ₱{record.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                  </span>
-                  <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                    Bal: ₱{record.newBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                  </span>
-                </div>
-
-                {/* Hash Links */}
-                <div style={{
-                  background: 'rgba(2, 6, 23, 0.7)',
-                  borderRadius: '8px',
-                  padding: '10px',
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: '11px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '6px'
-                }}>
-                  <div>
-                    <span style={{ color: 'var(--text-subtle)' }}>Prev Hash: </span>
-                    <span style={{ color: isBroken ? 'var(--color-danger)' : 'var(--text-muted)' }}>
-                      {record.previousHash.slice(0, 16)}...
-                    </span>
-                  </div>
-                  <div>
-                    <span style={{ color: 'var(--text-subtle)' }}>Curr Hash: </span>
-                    <span style={{ color: 'var(--accent-cyan)' }}>
-                      {record.currentHash.slice(0, 16)}...
-                    </span>
-                  </div>
-                </div>
-
-                {/* Status indicator */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', color: 'var(--text-subtle)' }}>
-                  <span>{new Date(record.eventTimestamp).toLocaleTimeString()}</span>
-                  <span style={{
                     display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    color: isBroken ? 'var(--color-danger)' : 'var(--color-success)',
-                    fontWeight: '600'
+                    flexDirection: 'column',
+                    gap: '6px'
                   }}>
-                    {isBroken ? <AlertTriangle size={12} /> : <Lock size={12} />}
-                    {isBroken ? 'Link Broken' : 'Chained & Sealed'}
-                  </span>
+                    <div>
+                      <span style={{ color: 'var(--text-subtle)' }}>Prev Hash: </span>
+                      <span style={{ color: isBroken ? 'var(--color-danger)' : 'var(--text-muted)' }}>
+                        {prevHashStr ? `${prevHashStr.slice(0, 16)}...` : 'N/A (Genesis / Sealed)'}
+                      </span>
+                    </div>
+                    <div>
+                      <span style={{ color: 'var(--text-subtle)' }}>Curr Hash: </span>
+                      <span style={{ color: 'var(--accent-cyan)' }}>
+                        {currHashStr ? `${currHashStr.slice(0, 16)}...` : 'N/A'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Status indicator */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', color: 'var(--text-subtle)' }}>
+                    <span>{record?.eventTimestamp ? new Date(record.eventTimestamp).toLocaleTimeString() : 'N/A'}</span>
+                    <span style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      color: isBroken ? 'var(--color-danger)' : 'var(--color-success)',
+                      fontWeight: '600'
+                    }}>
+                      {isBroken ? <AlertTriangle size={12} /> : <Lock size={12} />}
+                      {isBroken ? 'Link Broken' : 'Chained & Sealed'}
+                    </span>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })
+          )}
         </div>
       </div>
 
@@ -452,7 +501,7 @@ export const AuditView: React.FC<AuditViewProps> = ({ accounts }) => {
             </p>
           </div>
           <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-            Showing {auditRecords.length} mutations
+            Showing {auditRecords?.length || 0} mutations
           </span>
         </div>
 
@@ -471,68 +520,80 @@ export const AuditView: React.FC<AuditViewProps> = ({ accounts }) => {
               </tr>
             </thead>
             <tbody>
-              {auditRecords.map(record => (
-                <tr
-                  key={record.auditId}
-                  style={{
-                    borderBottom: '1px solid var(--border-subtle)',
-                    transition: 'background 0.15s ease'
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(56, 189, 248, 0.04)'}
-                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                >
-                  <td style={{ padding: '14px 20px', fontFamily: 'var(--font-mono)', color: 'var(--text-subtle)' }}>
-                    #{record.auditId}
-                  </td>
-                  <td style={{ padding: '14px 20px', fontWeight: '600', color: '#ffffff' }}>
-                    {record.referenceNo || `TXN-${record.transactionId}`}
-                  </td>
-                  <td style={{ padding: '14px 20px' }}>
-                    <span style={{
-                      fontSize: '11px',
-                      fontWeight: '700',
-                      padding: '3px 8px',
-                      borderRadius: '6px',
-                      background: record.transactionType.includes('DEPOSIT') || record.transactionType.includes('CREDIT') ? 'rgba(16, 185, 129, 0.15)' : 'rgba(99, 102, 241, 0.15)',
-                      color: record.transactionType.includes('DEPOSIT') || record.transactionType.includes('CREDIT') ? 'var(--color-success)' : 'var(--accent-indigo)'
-                    }}>
-                      {record.transactionType}
-                    </span>
-                  </td>
-                  <td style={{ padding: '14px 20px', fontWeight: '700', color: '#ffffff' }}>
-                    ₱{record.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                  </td>
-                  <td style={{ padding: '14px 20px', color: 'var(--text-muted)' }}>
-                    ₱{record.newBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                  </td>
-                  <td style={{ padding: '14px 20px', fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--accent-cyan)' }}>
-                    {record.currentHash.slice(0, 16)}...
-                  </td>
-                  <td style={{ padding: '14px 20px', fontSize: '12px', color: 'var(--text-subtle)' }}>
-                    {new Date(record.eventTimestamp).toLocaleString()}
-                  </td>
-                  <td style={{ padding: '14px 20px' }}>
-                    <button
-                      onClick={() => setSelectedRecord(record)}
-                      style={{
-                        padding: '6px 10px',
-                        borderRadius: '6px',
-                        fontSize: '11px',
-                        border: '1px solid var(--border-subtle)',
-                        background: 'rgba(2, 6, 23, 0.6)',
-                        color: 'var(--accent-cyan)',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '4px'
-                      }}
-                    >
-                      <Eye size={12} />
-                      Inspect
-                    </button>
+              {(!auditRecords || auditRecords.length === 0) ? (
+                <tr>
+                  <td colSpan={8} style={{ padding: '32px', textAlign: 'center', color: 'var(--text-subtle)' }}>
+                    No audit records available for this account.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                auditRecords.map(record => {
+                  const txnType = record?.transactionType || 'TRANSACTION';
+                  const isCredit = txnType.includes('DEPOSIT') || txnType.includes('CREDIT');
+                  return (
+                    <tr
+                      key={record.auditId}
+                      style={{
+                        borderBottom: '1px solid var(--border-subtle)',
+                        transition: 'background 0.15s ease'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(56, 189, 248, 0.04)'}
+                      onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                    >
+                      <td style={{ padding: '14px 20px', fontFamily: 'var(--font-mono)', color: 'var(--text-subtle)' }}>
+                        #{record.auditId}
+                      </td>
+                      <td style={{ padding: '14px 20px', fontWeight: '600', color: '#ffffff' }}>
+                        {record.referenceNo || `TXN-${record.transactionId}`}
+                      </td>
+                      <td style={{ padding: '14px 20px' }}>
+                        <span style={{
+                          fontSize: '11px',
+                          fontWeight: '700',
+                          padding: '3px 8px',
+                          borderRadius: '6px',
+                          background: isCredit ? 'rgba(16, 185, 129, 0.15)' : 'rgba(99, 102, 241, 0.15)',
+                          color: isCredit ? 'var(--color-success)' : 'var(--accent-indigo)'
+                        }}>
+                          {txnType}
+                        </span>
+                      </td>
+                      <td style={{ padding: '14px 20px', fontWeight: '700', color: '#ffffff' }}>
+                        ₱{Number(record?.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td style={{ padding: '14px 20px', color: 'var(--text-muted)' }}>
+                        ₱{Number(record?.newBalance || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td style={{ padding: '14px 20px', fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--accent-cyan)' }}>
+                        {record?.currentHash ? `${record.currentHash.slice(0, 16)}...` : 'N/A'}
+                      </td>
+                      <td style={{ padding: '14px 20px', fontSize: '12px', color: 'var(--text-subtle)' }}>
+                        {record?.eventTimestamp ? new Date(record.eventTimestamp).toLocaleString() : 'N/A'}
+                      </td>
+                      <td style={{ padding: '14px 20px' }}>
+                        <button
+                          onClick={() => setSelectedRecord(record)}
+                          style={{
+                            padding: '6px 10px',
+                            borderRadius: '6px',
+                            fontSize: '11px',
+                            border: '1px solid var(--border-subtle)',
+                            background: 'rgba(2, 6, 23, 0.6)',
+                            color: 'var(--accent-cyan)',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                        >
+                          <Eye size={12} />
+                          Inspect
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
@@ -596,15 +657,15 @@ export const AuditView: React.FC<AuditViewProps> = ({ accounts }) => {
               </div>
               <div>
                 <div style={{ color: 'var(--text-subtle)', fontSize: '11px' }}>MUTATION TYPE</div>
-                <div style={{ fontWeight: '600', color: 'var(--color-success)', marginTop: '2px' }}>{selectedRecord.transactionType}</div>
+                <div style={{ fontWeight: '600', color: 'var(--color-success)', marginTop: '2px' }}>{selectedRecord.transactionType || 'N/A'}</div>
               </div>
               <div>
                 <div style={{ color: 'var(--text-subtle)', fontSize: '11px' }}>MUTATION AMOUNT</div>
-                <div style={{ fontWeight: '700', color: '#ffffff', marginTop: '2px' }}>₱{selectedRecord.amount.toFixed(2)}</div>
+                <div style={{ fontWeight: '700', color: '#ffffff', marginTop: '2px' }}>₱{Number(selectedRecord.amount || 0).toFixed(2)}</div>
               </div>
               <div>
                 <div style={{ color: 'var(--text-subtle)', fontSize: '11px' }}>NEW BALANCE</div>
-                <div style={{ fontWeight: '700', color: 'var(--accent-cyan)', marginTop: '2px' }}>₱{selectedRecord.newBalance.toFixed(2)}</div>
+                <div style={{ fontWeight: '700', color: 'var(--accent-cyan)', marginTop: '2px' }}>₱{Number(selectedRecord.newBalance || 0).toFixed(2)}</div>
               </div>
               <div>
                 <div style={{ color: 'var(--text-subtle)', fontSize: '11px' }}>ACTOR ID / CLIENT IP</div>
@@ -612,7 +673,7 @@ export const AuditView: React.FC<AuditViewProps> = ({ accounts }) => {
               </div>
               <div>
                 <div style={{ color: 'var(--text-subtle)', fontSize: '11px' }}>RECORD TIMESTAMP</div>
-                <div style={{ color: 'var(--text-muted)', marginTop: '2px' }}>{new Date(selectedRecord.eventTimestamp).toLocaleString()}</div>
+                <div style={{ color: 'var(--text-muted)', marginTop: '2px' }}>{selectedRecord.eventTimestamp ? new Date(selectedRecord.eventTimestamp).toLocaleString() : 'N/A'}</div>
               </div>
             </div>
 
@@ -629,11 +690,11 @@ export const AuditView: React.FC<AuditViewProps> = ({ accounts }) => {
             }}>
               <div>
                 <div style={{ color: 'var(--text-subtle)', marginBottom: '4px' }}>PREVIOUS HASH (PREDECESSOR LINK)</div>
-                <div style={{ color: 'var(--text-muted)', wordBreak: 'break-all' }}>{selectedRecord.previousHash}</div>
+                <div style={{ color: 'var(--text-muted)', wordBreak: 'break-all' }}>{selectedRecord.previousHash || '0000000000000000000000000000000000000000000000000000000000000000 (GENESIS)'}</div>
               </div>
               <div>
                 <div style={{ color: 'var(--text-subtle)', marginBottom: '4px' }}>CURRENT SHA-256 HASH DIGEST</div>
-                <div style={{ color: 'var(--accent-cyan)', wordBreak: 'break-all' }}>{selectedRecord.currentHash}</div>
+                <div style={{ color: 'var(--accent-cyan)', wordBreak: 'break-all' }}>{selectedRecord.currentHash || 'N/A'}</div>
               </div>
             </div>
 
