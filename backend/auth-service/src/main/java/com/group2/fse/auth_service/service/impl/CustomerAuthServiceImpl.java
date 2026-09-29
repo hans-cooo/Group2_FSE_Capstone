@@ -1,6 +1,17 @@
 package com.group2.fse.auth_service.service.impl;
 
-import com.group2.fse.auth_service.dto.*;
+import java.util.List;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.group2.fse.auth_service.dto.AuthResponseDto;
+import com.group2.fse.auth_service.dto.CustomerRegistrationDto;
+import com.group2.fse.auth_service.dto.LoginRequestDto;
+import com.group2.fse.auth_service.dto.LoginResultDto;
+import com.group2.fse.auth_service.dto.MfaVerifyRequestDto;
 import com.group2.fse.auth_service.entity.Customer;
 import com.group2.fse.auth_service.entity.Kyc;
 import com.group2.fse.auth_service.exception.InvalidCredentialsException;
@@ -13,14 +24,9 @@ import com.group2.fse.auth_service.security.mfa.MfaChallenge;
 import com.group2.fse.auth_service.security.mfa.MfaChallengeService;
 import com.group2.fse.auth_service.security.session.RedisRefreshTokenService;
 import com.group2.fse.auth_service.service.CustomerAuthService;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -88,6 +94,7 @@ public class CustomerAuthServiceImpl implements CustomerAuthService {
 
         if (!passwordEncoder.matches(request.getPassword(), customer.getPasswordHash())) {
             log.warn("Invalid password for customer username: {}", request.getUsername());
+            log.warn("Password hash: {}, Provided password: {}", customer.getPasswordHash(), request.getPassword());
             throw new InvalidCredentialsException("Invalid username or password");
         }
 
