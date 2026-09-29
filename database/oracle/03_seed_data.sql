@@ -13,23 +13,23 @@ INSERT INTO ROLE (role_name) VALUES ('ROLE_CUSTOMER');
 -- 2. SEED INTERNAL USERS (BCrypt hash for 'Password123!')
 -- $2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVKIUi
 INSERT INTO "USER" (role_id, username, password_hash, email, status)
-VALUES (1, 'admin', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVKIUi', 'admin@corebank.local', 'ACTIVE');
+VALUES (1, 'admin', '$2a$10$i3NuBhqny.i6sVVFkD1aDuXRLkZJe.b4/BK3bt/VRpkZQTZEFkcUy', 'admin@corebank.local', 'ACTIVE');
 
 INSERT INTO "USER" (role_id, username, password_hash, email, status)
-VALUES (2, 'teller_alice', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVKIUi', 'alice@corebank.local', 'ACTIVE');
+VALUES (2, 'teller_alice', '$2a$10$i3NuBhqny.i6sVVFkD1aDuXRLkZJe.b4/BK3bt/VRpkZQTZEFkcUy', 'alice@corebank.local', 'ACTIVE');
 
 INSERT INTO "USER" (role_id, username, password_hash, email, status)
-VALUES (2, 'teller_bob', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVKIUi', 'bob@corebank.local', 'ACTIVE');
+VALUES (2, 'teller_bob', '$2a$10$i3NuBhqny.i6sVVFkD1aDuXRLkZJe.b4/BK3bt/VRpkZQTZEFkcUy', 'bob@corebank.local', 'ACTIVE');
 
 -- 3. SEED CUSTOMERS
 INSERT INTO CUSTOMER (username, password_hash, email, kyc_status)
-VALUES ('john_doe', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVKIUi', 'john.doe@example.com', 'VERIFIED');
+VALUES ('john_doe', '$2a$10$i3NuBhqny.i6sVVFkD1aDuXRLkZJe.b4/BK3bt/VRpkZQTZEFkcUy', 'john.doe@example.com', 'VERIFIED');
 
 INSERT INTO CUSTOMER (username, password_hash, email, kyc_status)
-VALUES ('maria_santos', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVKIUi', 'maria.santos@example.com', 'VERIFIED');
+VALUES ('maria_santos', '$2a$10$i3NuBhqny.i6sVVFkD1aDuXRLkZJe.b4/BK3bt/VRpkZQTZEFkcUy', 'maria.santos@example.com', 'VERIFIED');
 
 INSERT INTO CUSTOMER (username, password_hash, email, kyc_status)
-VALUES ('david_kim', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iKTVKIUi', 'david.kim@example.com', 'VERIFIED');
+VALUES ('david_kim', '$2a$10$i3NuBhqny.i6sVVFkD1aDuXRLkZJe.b4/BK3bt/VRpkZQTZEFkcUy', 'david.kim@example.com', 'VERIFIED');
 
 -- 4. SEED KYC
 INSERT INTO KYC (customer_id, first_name, middle_initial, last_name, address, civil_status, occupation, mobile_number, status)
