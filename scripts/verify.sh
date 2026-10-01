@@ -4,6 +4,15 @@
 # ==============================================================================
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(dirname "${SCRIPT_DIR}")"
+if [ -f "${ROOT_DIR}/.env" ]; then
+    set -a
+    # shellcheck disable=SC1091
+    source "${ROOT_DIR}/.env"
+    set +a
+fi
+
 echo "================================================================="
 echo " Running Data Foundation Verification & Integrity Checks...      "
 echo "================================================================="
@@ -14,7 +23,7 @@ TOTAL=6
 # 1. Oracle Verification
 echo ""
 echo "[Check 1/6] Oracle Database (Master System of Record)..."
-if docker exec oracle-core-db bash -c "echo 'SELECT COUNT(*) FROM core_user.BALANCE;' | sqlplus -s core_user/CorePassword123!@localhost:1521/XEPDB1" | grep -q "3"; then
+if docker exec oracle-core-db bash -c "echo 'SELECT COUNT(*) FROM BALANCE;' | sqlplus -s ${APP_USER:-core_user}/${APP_USER_PASSWORD}@localhost:1521/${ORACLE_DATABASE:-XEPDB1}" | grep -q "3"; then
     echo "  [PASS] Oracle connected. BALANCE table has 3 seed records."
     PASSED=$((PASSED + 1))
 else

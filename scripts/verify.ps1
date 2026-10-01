@@ -15,6 +15,22 @@ if (Test-Path variable:PSNativeCommandUseErrorActionPreference) {
 }
 
 $rootPath = Split-Path -Parent $PSScriptRoot
+
+# Load .env into process environment if available
+$envFile = Join-Path $rootPath ".env"
+if (Test-Path $envFile) {
+    Get-Content $envFile | ForEach-Object {
+        $trimmed = $_.Trim()
+        if ($trimmed -and -not $trimmed.StartsWith("#") -and $trimmed.Contains("=")) {
+            $kv = $trimmed.Split("=", 2)
+            [System.Environment]::SetEnvironmentVariable($kv[0].Trim(), $kv[1].Trim(), "Process")
+        }
+    }
+}
+$appUser = if ($env:APP_USER) { $env:APP_USER } else { "core_user" }
+$appUserPassword = if ($env:APP_USER_PASSWORD) { $env:APP_USER_PASSWORD } else { "" }
+$oracleDb = if ($env:ORACLE_DATABASE) { $env:ORACLE_DATABASE } else { "XEPDB1" }
+
 Write-Host "=================================================================" -ForegroundColor Cyan
 Write-Host " Running Data Foundation Verification & Integrity Checks...      " -ForegroundColor Cyan
 Write-Host "=================================================================" -ForegroundColor Cyan
@@ -27,7 +43,7 @@ $total = 6
 # ------------------------------------------------------------------------------
 Write-Host "`n[Check 1/6] Oracle Database (Master System of Record)..." -ForegroundColor Yellow
 try {
-    $oraResult = docker exec oracle-core-db bash -c "printf 'SET PAGESIZE 0 FEEDBACK OFF;\nSELECT COUNT(*) FROM BALANCE;\n' | sqlplus -s core_user/CorePassword123!@localhost:1521/XEPDB1"
+    $oraResult = docker exec oracle-core-db bash -c "printf 'SET PAGESIZE 0 FEEDBACK OFF;\nSELECT COUNT(*) FROM BALANCE;\n' | sqlplus -s $appUser/$appUserPassword@localhost:1521/$oracleDb"
     $trimmedResult = ($oraResult -join "").Trim()
     
     if ($trimmedResult -match "^[0-9]+$" -and [int]$trimmedResult -ge 3) {
@@ -38,7 +54,7 @@ try {
     }
 
     # Invariant Check Constraint Test (Non-negative balance)
-    $negResult = docker exec oracle-core-db bash -c "printf 'INSERT INTO BALANCE (account_id, available_balance) VALUES (999, -100.0000);\n' | sqlplus -s core_user/CorePassword123!@localhost:1521/XEPDB1" 2>&1
+    $negResult = docker exec oracle-core-db bash -c "printf 'INSERT INTO BALANCE (account_id, available_balance) VALUES (999, -100.0000);\n' | sqlplus -s $appUser/$appUserPassword@localhost:1521/$oracleDb" 2>&1
     if (($negResult -join " ") -match "ORA-02290" -or ($negResult -join " ") -match "check constraint") {
         Write-Host "  [PASS] Oracle Invariant Guard active: Negative balance insertion correctly blocked by ORA-02290." -ForegroundColor Green
     } else {

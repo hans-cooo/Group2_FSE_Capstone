@@ -1,0 +1,725 @@
+{
+  "info": {
+    "_postman_id": "c00b5-kafka-verification-v1",
+    "name": "CooBS - Kafka Event-Driven Verification",
+    "description": "Automated, reusable test suite verifying end-to-end Apache Kafka event publishing and consumption across ledger-service, account-service, and notification-service.\n\nDesigned to run using 'CooBS Local Environment' (CooBS_Local.postman_environment.json).\n\nVerifies:\n1. Successful transfer -> produces ledger.transfer.completed.v1 -> consumed by notification-service (Sender & Recipient notified)\n2. Failed transfer -> produces ledger.transfer.failed.v1 -> consumed by notification-service (Failure alert generated)\n3. KYC Update Submitted -> produces kyc.request.submitted.v1 -> consumed by notification-service\n4. KYC Update Approved -> produces kyc.request.evaluated.v1 -> consumed by notification-service\n5. KYC Update Rejected -> produces kyc.request.evaluated.v1 -> consumed by notification-service",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "01. Auth & Session Setup",
+      "item": [
+        {
+          "name": "1.1 Login Sender Customer (john_doe)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Sender login successful (200 OK)\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.test(\"Sender JWT token extracted\", function () {",
+                  "    pm.expect(data.authData).to.be.an('object');",
+                  "    pm.expect(data.authData.accessToken).to.not.be.empty;",
+                  "    pm.environment.set(\"customer_token\", data.authData.accessToken);",
+                  "    if (data.authData.customerId) {",
+                  "        pm.environment.set(\"customer_id\", data.authData.customerId);",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{customerUsername}}\",\n  \"password\": \"{{customerPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/customers/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "customers", "login"]
+            }
+          }
+        },
+        {
+          "name": "1.2 Login Recipient Customer (maria_santos)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Recipient login successful (200 OK)\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.test(\"Recipient JWT token extracted\", function () {",
+                  "    pm.expect(data.authData).to.be.an('object');",
+                  "    pm.expect(data.authData.accessToken).to.not.be.empty;",
+                  "    pm.environment.set(\"counterparty_token\", data.authData.accessToken);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"maria_santos\",\n  \"password\": \"Password123!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/customers/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "customers", "login"]
+            }
+          }
+        },
+        {
+          "name": "1.3 Login Staff Teller (teller_alice)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Teller login successful (200 OK)\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.test(\"Teller JWT token extracted\", function () {",
+                  "    pm.expect(data.authData).to.be.an('object');",
+                  "    pm.expect(data.authData.accessToken).to.not.be.empty;",
+                  "    pm.environment.set(\"teller_token\", data.authData.accessToken);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{tellerUsername}}\",\n  \"password\": \"{{tellerPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/staff/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "staff", "login"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "02. Flow 1: Completed Transfer Kafka Verification",
+      "item": [
+        {
+          "name": "2.1 Ledger - Execute Successful Transfer",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.environment.set(\"transfer_ref\", \"TRF-KAFKA-\" + Date.now());",
+                  "pm.environment.set(\"transfer_amount\", \"50.00\");"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Transfer created successfully (201 Created)\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.test(\"Transfer response has status COMPLETED\", function () {",
+                  "    pm.expect(data.status).to.eql(\"COMPLETED\");",
+                  "    pm.expect(data.transferReference).to.eql(pm.environment.get(\"transfer_ref\"));",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "idemp-{{$timestamp}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sourceAccountId\": {{source_account_id}},\n  \"destinationAccountId\": {{dest_account_id}},\n  \"amount\": 50.00,\n  \"referenceNo\": \"{{transfer_ref}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ledger/transfers",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "ledger", "transfers"]
+            }
+          }
+        },
+        {
+          "name": "2.2 Notification - Verify Sender Received Transfer Sent Alert",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Sender notifications fetched (200 OK)\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "var notifs = data.content || [];",
+                  "var ref = pm.environment.get(\"transfer_ref\");",
+                  "pm.test(\"KAFKA CONSUMED: Sender has 'Funds Transfer Sent' notification with reference\", function () {",
+                  "    var found = notifs.some(function(n) {",
+                  "        return n.title === \"Funds Transfer Sent\" && (n.message.includes(ref) || n.message.includes(\"50\"));",
+                  "    });",
+                  "    pm.expect(found, \"Expected Kafka consumer to persist sender transfer notification\").to.be.true;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/my-notifications?page=0&size=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "notifications", "my-notifications"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.3 Notification - Verify Recipient Received Transfer Credit Alert",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Recipient notifications fetched (200 OK)\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "var notifs = data.content || [];",
+                  "var ref = pm.environment.get(\"transfer_ref\");",
+                  "pm.test(\"KAFKA CONSUMED: Recipient has 'Funds Transfer Received' notification\", function () {",
+                  "    var found = notifs.some(function(n) {",
+                  "        return n.title === \"Funds Transfer Received\" && (n.message.includes(ref) || n.message.includes(\"50\"));",
+                  "    });",
+                  "    pm.expect(found, \"Expected Kafka consumer to persist recipient transfer notification\").to.be.true;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{counterparty_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/my-notifications?page=0&size=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "notifications", "my-notifications"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03. Flow 2: Failed Transfer Kafka Verification",
+      "item": [
+        {
+          "name": "3.1 Ledger - Attempt Over-Limit / Insufficient Funds Transfer",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.environment.set(\"failed_transfer_ref\", \"TRF-FAIL-\" + Date.now());"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Transfer rejected due to insufficient funds (400 or 422)\", function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([400, 422]);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "idemp-fail-{{$timestamp}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sourceAccountId\": {{source_account_id}},\n  \"destinationAccountId\": {{dest_account_id}},\n  \"amount\": 999999999.00,\n  \"referenceNo\": \"{{failed_transfer_ref}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ledger/transfers",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "ledger", "transfers"]
+            }
+          }
+        },
+        {
+          "name": "3.2 Notification - Verify Customer Received Transfer Failed Alert",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Sender notifications fetched (200 OK)\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "var notifs = data.content || [];",
+                  "var ref = pm.environment.get(\"failed_transfer_ref\");",
+                  "pm.test(\"KAFKA CONSUMED: Customer has 'Funds Transfer Failed' notification\", function () {",
+                  "    var found = notifs.some(function(n) {",
+                  "        return n.title === \"Funds Transfer Failed\" && (n.message.includes(ref) || n.message.includes(\"Insufficient funds\"));",
+                  "    });",
+                  "    pm.expect(found, \"Expected Kafka consumer to persist transfer failure notification\").to.be.true;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/my-notifications?page=0&size=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "notifications", "my-notifications"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "04. Flow 3: KYC Submission Kafka Verification",
+      "item": [
+        {
+          "name": "4.1 Customer - Submit KYC Update Request",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"KYC submission returns 200, 201, or 202\", function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 202]);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.test(\"KYC request ID captured\", function () {",
+                  "    pm.expect(data.kycRequestId).to.be.a('number');",
+                  "    pm.environment.set(\"kyc_update_req_id\", data.kycRequestId);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"newFirstName\": \"John\",\n  \"newLastName\": \"Doe Updated\",\n  \"newAddress\": \"777 Financial Tower, BGC, Taguig\",\n  \"newMobileNumber\": \"+639179998877\",\n  \"newCivilStatus\": \"MARRIED\",\n  \"newOccupation\": \"Senior Architect\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/customers/kyc/update-request",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "customers", "kyc", "update-request"]
+            }
+          }
+        },
+        {
+          "name": "4.2 Notification - Verify KYC Submission Alert",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Customer notifications fetched (200 OK)\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "var notifs = data.content || [];",
+                  "var reqId = pm.environment.get(\"kyc_update_req_id\");",
+                  "pm.test(\"KAFKA CONSUMED: Customer has 'KYC Update Submitted' notification\", function () {",
+                  "    var found = notifs.some(function(n) {",
+                  "        return n.title === \"KYC Update Submitted\" && n.message.includes(\"#\" + reqId);",
+                  "    });",
+                  "    pm.expect(found, \"Expected Kafka consumer to persist KYC update submission notification\").to.be.true;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/my-notifications?page=0&size=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "notifications", "my-notifications"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "05. Flow 4: KYC Approval Kafka Verification",
+      "item": [
+        {
+          "name": "5.1 Staff - Approve KYC Update Request",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"KYC approval returns 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.test(\"Status updated to APPROVED\", function () {",
+                  "    pm.expect(data.status).to.eql(\"APPROVED\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teller_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/customers/kyc/update-request/{{kyc_update_req_id}}/approve",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "customers", "kyc", "update-request", "{{kyc_update_req_id}}", "approve"]
+            }
+          }
+        },
+        {
+          "name": "5.2 Notification - Verify KYC Approved Alert",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Customer notifications fetched (200 OK)\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "var notifs = data.content || [];",
+                  "var reqId = pm.environment.get(\"kyc_update_req_id\");",
+                  "pm.test(\"KAFKA CONSUMED: Customer has 'KYC Update Approved' notification\", function () {",
+                  "    var found = notifs.some(function(n) {",
+                  "        return n.title === \"KYC Update Approved\" && n.message.includes(\"#\" + reqId);",
+                  "    });",
+                  "    pm.expect(found, \"Expected Kafka consumer to persist KYC approval notification\").to.be.true;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/my-notifications?page=0&size=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "notifications", "my-notifications"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "06. Flow 5: KYC Rejection Kafka Verification",
+      "item": [
+        {
+          "name": "6.1 Customer - Submit 2nd KYC Update Request for Rejection Test",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"2nd KYC submission returns 200, 201, or 202\", function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 202]);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.environment.set(\"kyc_reject_req_id\", data.kycRequestId);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"newFirstName\": \"John\",\n  \"newLastName\": \"Doe Reject Test\",\n  \"newAddress\": \"Temporary Address for Rejection\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/customers/kyc/update-request",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "customers", "kyc", "update-request"]
+            }
+          }
+        },
+        {
+          "name": "6.2 Staff - Reject KYC Update Request",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"KYC rejection returns 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.test(\"Status updated to REJECTED with reason\", function () {",
+                  "    pm.expect(data.status).to.eql(\"REJECTED\");",
+                  "    pm.expect(data.rejectionReason).to.eql(\"Blurry identity documentation\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teller_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rejectionReason\": \"Blurry identity documentation\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/customers/kyc/update-request/{{kyc_reject_req_id}}/reject",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "customers", "kyc", "update-request", "{{kyc_reject_req_id}}", "reject"]
+            }
+          }
+        },
+        {
+          "name": "6.3 Notification - Verify KYC Rejected Alert",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Customer notifications fetched (200 OK)\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "var notifs = data.content || [];",
+                  "var reqId = pm.environment.get(\"kyc_reject_req_id\");",
+                  "pm.test(\"KAFKA CONSUMED: Customer has 'KYC Update Rejected' notification\", function () {",
+                  "    var found = notifs.some(function(n) {",
+                  "        return n.title === \"KYC Update Rejected\" && n.message.includes(\"#\" + reqId) && n.message.includes(\"Blurry identity documentation\");",
+                  "    });",
+                  "    pm.expect(found, \"Expected Kafka consumer to persist KYC rejection notification\").to.be.true;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/my-notifications?page=0&size=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "notifications", "my-notifications"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

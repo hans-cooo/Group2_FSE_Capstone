@@ -43,6 +43,9 @@ class AccountBalanceServiceTest {
     @Mock
     private DualWriteLedgerAuditService dualWriteAuditService;
 
+    @Mock
+    private org.springframework.context.ApplicationEventPublisher applicationEventPublisher;
+
     @InjectMocks
     private AccountBalanceServiceImpl balanceService;
 

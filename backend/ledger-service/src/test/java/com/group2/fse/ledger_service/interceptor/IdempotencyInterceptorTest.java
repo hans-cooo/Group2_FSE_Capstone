@@ -10,7 +10,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.web.util.ContentCachingResponseWrapper;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Optional;
 
@@ -20,7 +22,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
-@DisplayName("IdempotencyInterceptor Unit Tests (Carl - FSE-301)")
+@DisplayName("IdempotencyInterceptor Unit Tests (Carl - FSE-301 / FSE-307)")
 class IdempotencyInterceptorTest {
 
     @Mock
@@ -110,5 +112,64 @@ class IdempotencyInterceptorTest {
         assertEquals(200, response.getStatus());
         assertEquals("true", response.getHeader("X-Cache-Replay"));
         assertEquals(cachedJson, response.getContentAsString());
+    }
+
+    @Test
+    @DisplayName("Should cache 2xx response body in Redis with 24h TTL upon successful completion")
+    void shouldCacheResponseOnSuccessful2xxCompletion() throws Exception {
+        String key = "idemp-success-key";
+        request.setAttribute(IdempotencyInterceptor.IDEMPOTENCY_KEY_ATTR, key);
+
+        ContentCachingResponseWrapper wrapper = new ContentCachingResponseWrapper(response);
+        wrapper.setStatus(201);
+        String payload = "{\"transferReference\":\"TRF-101\",\"status\":\"COMPLETED\"}";
+        wrapper.getOutputStream().write(payload.getBytes(StandardCharsets.UTF_8));
+        wrapper.flushBuffer();
+
+        request.setAttribute(ContentCachingResponseWrapperFilter.CACHED_RESPONSE_WRAPPER_ATTR, wrapper);
+
+        interceptor.afterCompletion(request, wrapper, new Object(), null);
+
+        verify(idempotencyService).complete(eq(key), eq(payload), eq(Duration.ofHours(24)));
+        verify(idempotencyService, never()).release(any());
+    }
+
+    @Test
+    @DisplayName("Should release lock when transaction completes with 4xx or 5xx status")
+    void shouldReleaseLockOnFailedHttpStatus() throws Exception {
+        String key = "idemp-failed-key";
+        request.setAttribute(IdempotencyInterceptor.IDEMPOTENCY_KEY_ATTR, key);
+
+        response.setStatus(422);
+
+        interceptor.afterCompletion(request, response, new Object(), null);
+
+        verify(idempotencyService).release(eq(key));
+        verify(idempotencyService, never()).complete(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("Should release lock when transaction throws an uncaught exception")
+    void shouldReleaseLockOnException() throws Exception {
+        String key = "idemp-ex-key";
+        request.setAttribute(IdempotencyInterceptor.IDEMPOTENCY_KEY_ATTR, key);
+
+        response.setStatus(500);
+        Exception ex = new RuntimeException("Database deadlock");
+
+        interceptor.afterCompletion(request, response, new Object(), ex);
+
+        verify(idempotencyService).release(eq(key));
+        verify(idempotencyService, never()).complete(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("Should ignore afterCompletion when request has no idempotency key attribute")
+    void shouldIgnoreWhenNoKeyAttribute() throws Exception {
+        response.setStatus(200);
+
+        interceptor.afterCompletion(request, response, new Object(), null);
+
+        verifyNoInteractions(idempotencyService);
     }
 }

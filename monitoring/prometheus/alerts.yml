@@ -1,0 +1,41 @@
+# ==============================================================================
+# Prometheus Alerting Rules for CooBS Core Retail Banking Platform
+# ==============================================================================
+groups:
+  - name: coobs_banking_alerts
+    rules:
+      - alert: ServiceDown
+        expr: up == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Core banking service {{ $labels.job }} is DOWN"
+          description: "Service instance {{ $labels.instance }} has been unreachable for more than 30 seconds."
+
+      - alert: HighHttp5xxRate
+        expr: sum(rate(http_server_requests_seconds_count{status=~"5.."}[1m])) / sum(rate(http_server_requests_seconds_count[1m])) * 100 > 5
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High HTTP 5xx error rate on {{ $labels.application }}"
+          description: "Over 5% of incoming HTTP requests are returning 5xx server errors over the last 1 minute."
+
+      - alert: SlowTransferLatencyP99
+        expr: histogram_quantile(0.99, sum(rate(http_server_requests_seconds_bucket{uri=~"/api/v1/ledger/.*"}[1m])) by (le)) > 0.5
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Ledger mutation P99 latency exceeded 500ms"
+          description: "99th percentile of double-entry ledger transfers is taking longer than 500ms, indicating database lock contention or Redis latency."
+
+      - alert: HikariConnectionPoolSaturation
+        expr: (hikaricp_connections_active / (hikaricp_connections_idle + hikaricp_connections_active)) > 0.90
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "HikariCP database connection pool is 90% saturated on {{ $labels.application }}"
+          description: "Active database connections exceed 90% of available pool capacity for over 1 minute."

@@ -50,6 +50,8 @@ desktop.ini
 logs/
 *.tmp
 *.temp
+__pycache__/
+*.pyc
 
 # ------------------------------------------------------------------------------
 # Java & Spring Boot Build Artifacts (Phases 2 - 4)
@@ -95,6 +97,12 @@ CAPSTONE FSE.docx
 *.xlsx
 *.pptx
 generate_report*.py
+*PERSONAL_NOTES*.md
+*STUDY_GUIDE*.md
+*ARCHITECTURE_AND_ENGINEERING_GUIDE*.md
+*ENGINEERING_GUIDE*.md
 docs/
 
+
+tasks/
 

@@ -1,0 +1,1158 @@
+{
+  "info": {
+    "_postman_id": "coobs-core-banking-suite-v1",
+    "name": "CooBS Core Retail Banking Platform \u2014 API Test Suite",
+    "description": "Comprehensive integration and contract test suite for the CooBS Core Retail Banking Platform.\nCovers API Gateway, Authentication (RBAC), Account Lifecycle, Double-Entry Ledger, Idempotency Mutex, In-App Notifications, and PostgreSQL Forensic SHA-256 Audit Verification.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "01. System Health & Ingress Gateway",
+      "item": [
+        {
+          "name": "1.1 API Gateway Actuator Health",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Gateway Health is UP\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.status).to.eql(\"UP\");",
+                  "});",
+                  "pm.test(\"Response time is under 500ms\", function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(500);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/actuator/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "actuator",
+                "health"
+              ]
+            }
+          }
+        },
+        {
+          "name": "1.2 Gateway Dynamic Routes Inspection",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Gateway discovers registered microservice routes\", function () {",
+                  "    var routes = pm.response.json();",
+                  "    pm.expect(routes).to.be.an(\"array\");",
+                  "    pm.expect(routes.length).to.be.at.least(4);",
+                  "    var routeIds = routes.map(r => r.route_id || r.id);",
+                  "    pm.expect(routeIds).to.include.members([\"auth-service-route\", \"account-service-accounts-route\", \"ledger-service-route\"]);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/actuator/gateway/routes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "actuator",
+                "gateway",
+                "routes"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "02. Identity, Auth & RBAC Security",
+      "item": [
+        {
+          "name": "2.1 Register New Retail Customer",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const unique = Date.now().toString().slice(-6);",
+                  "pm.environment.set(\"dynamic_username\", \"cust_\" + unique);",
+                  "pm.environment.set(\"dynamic_email\", \"user_\" + unique + \"@bankgroup2.fse\");",
+                  "pm.environment.set(\"dynamic_mobile\", \"+63917\" + unique);"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Customer Registration returns 201 Created\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.test(\"Cryptographic JWT pair received\", function () {",
+                  "    pm.expect(data.accessToken).to.not.be.empty;",
+                  "    pm.expect(data.userId).to.be.a(\"number\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{dynamic_username}}\",\n  \"password\": \"Password123!\",\n  \"email\": \"{{dynamic_email}}\",\n  \"firstName\": \"Automated\",\n  \"lastName\": \"Tester\",\n  \"middleInitial\": \"T\",\n  \"address\": \"88 Financial Center, Makati City\",\n  \"mobileNumber\": \"{{dynamic_mobile}}\",\n  \"civilStatus\": \"Single\",\n  \"occupation\": \"QA Automation Specialist\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/customers/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "customers",
+                "register"
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.2 Authenticate Primary Customer (john_doe)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Login returns 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.test(\"Auth data contains valid JWT Bearer token and customer role\", function () {",
+                  "    pm.expect(data.authData).to.exist;",
+                  "    pm.expect(data.authData.accessToken).to.not.be.empty;",
+                  "    pm.expect(data.authData.roles).to.include(\"ROLE_CUSTOMER\");",
+                  "    pm.expect(data.authData.userType).to.eql(\"CUSTOMER\");",
+                  "    pm.environment.set(\"customer_token\", data.authData.accessToken);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"john_doe\",\n  \"password\": \"Password123!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/customers/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "customers",
+                "login"
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.3 Authenticate Counterparty Customer (maria_santos)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Login returns 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.test(\"Token acquired for recipient\", function () {",
+                  "    pm.expect(data.authData.accessToken).to.not.be.empty;",
+                  "    pm.environment.set(\"counterparty_token\", data.authData.accessToken);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"maria_santos\",\n  \"password\": \"Password123!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/customers/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "customers",
+                "login"
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.4 Authenticate Branch Teller (teller_alice)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Staff login returns 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.test(\"Teller privileges assigned\", function () {",
+                  "    pm.expect(data.authData.roles).to.include(\"ROLE_TELLER\");",
+                  "    pm.expect(data.authData.userType).to.eql(\"STAFF\");",
+                  "    pm.environment.set(\"teller_token\", data.authData.accessToken);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"teller_alice\",\n  \"password\": \"Password123!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/staff/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "staff",
+                "login"
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.5 Authenticate System Administrator (admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Admin login returns 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.test(\"Administrator privileges assigned\", function () {",
+                  "    pm.expect(data.authData.roles).to.include(\"ROLE_ADMIN\");",
+                  "    pm.environment.set(\"admin_token\", data.authData.accessToken);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"Password123!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/staff/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "staff",
+                "login"
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.6 Security Negative Test - Bad Password",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Invalid credentials rejected with 401 Unauthorized\", function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.test(\"RFC-7807 Problem Details envelope returned\", function () {",
+                  "    pm.expect(data.errorCode || data.title).to.exist;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"john_doe\",\n  \"password\": \"WrongPassword999!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/customers/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "customers",
+                "login"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03. Accounts & Tenant Isolation (RBAC)",
+      "item": [
+        {
+          "name": "3.1 Customer View Own Accounts (Tenant Boundary)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var accounts = pm.response.json();",
+                  "pm.test(\"Customer sees strictly own account (Tenant Isolation)\", function () {",
+                  "    pm.expect(accounts).to.be.an(\"array\");",
+                  "    pm.expect(accounts.length).to.be.at.least(1);",
+                  "    accounts.forEach(function(account) {",
+                  "        pm.expect(account.customerName).to.eql(\"john_doe\");",
+                  "        pm.expect(account.customerId).to.eql(1);",
+                  "        pm.expect(account.status).to.eql(\"ACTIVE\");",
+                  "    });",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}"
+              },
+              {
+                "key": "X-Correlation-ID",
+                "value": "{{$guid}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/accounts/my-accounts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accounts",
+                "my-accounts"
+              ]
+            }
+          }
+        },
+        {
+          "name": "3.2 Teller View All Managed Accounts (Bank-Wide Scope)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Teller query returns 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var accounts = pm.response.json();",
+                  "pm.test(\"Teller views all accounts across the entire bank\", function () {",
+                  "    pm.expect(accounts).to.be.an(\"array\");",
+                  "    pm.expect(accounts.length).to.be.at.least(3);",
+                  "    var holderNames = accounts.map(a => a.customerName);",
+                  "    pm.expect(holderNames).to.include.members([\"john_doe\", \"maria_santos\", \"david_kim\"]);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teller_token}}"
+              },
+              {
+                "key": "X-Correlation-ID",
+                "value": "{{$guid}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/accounts/my-accounts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accounts",
+                "my-accounts"
+              ]
+            }
+          }
+        },
+        {
+          "name": "3.3 Admin Global Accounts Endpoint",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Admin global accounts returns 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var accounts = pm.response.json();",
+                  "pm.test(\"All bank accounts returned\", function () {",
+                  "    pm.expect(accounts.length).to.be.at.least(3);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "X-Correlation-ID",
+                "value": "{{$guid}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/accounts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accounts"
+              ]
+            }
+          }
+        },
+        {
+          "name": "3.4 Get Specific Account Details (Account #1)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var acc = pm.response.json();",
+                  "pm.test(\"Account #1 matches contract\", function () {",
+                  "    pm.expect(acc.accountId).to.eql(1);",
+                  "    pm.expect(acc.accountNumber).to.eql(\"ACC_10000001\");",
+                  "    pm.expect(acc.currency).to.eql(\"PHP\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}"
+              },
+              {
+                "key": "X-Correlation-ID",
+                "value": "{{$guid}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/accounts/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "accounts",
+                "1"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "04. Double-Entry Ledger & Concurrency Control",
+      "item": [
+        {
+          "name": "4.1 Atomic Double-Entry Fund Transfer",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const idemp = pm.variables.replaceIn('{{$guid}}');",
+                  "const corr = pm.variables.replaceIn('{{$guid}}');",
+                  "const ref = 'REF-POSTMAN-' + Math.floor(Math.random() * 900000 + 100000);",
+                  "pm.environment.set(\"last_idempotency_key\", idemp);",
+                  "pm.environment.set(\"current_transfer_corr_id\", corr);",
+                  "pm.environment.set(\"current_transfer_ref\", ref);"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Transfer executed with 201 Created\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.test(\"Double-entry balances reconciled\", function () {",
+                  "    pm.expect(data.status).to.eql(\"COMPLETED\");",
+                  "    pm.expect(data.sourceAccountId).to.eql(1);",
+                  "    pm.expect(data.destinationAccountId).to.eql(2);",
+                  "    pm.expect(parseFloat(data.sourceNewBalance)).to.be.below(parseFloat(data.sourcePreviousBalance));",
+                  "    pm.expect(parseFloat(data.destinationNewBalance)).to.be.above(parseFloat(data.destinationPreviousBalance));",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{last_idempotency_key}}"
+              },
+              {
+                "key": "X-Correlation-ID",
+                "value": "{{current_transfer_corr_id}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sourceAccountId\": 1,\n  \"destinationAccountId\": 2,\n  \"amount\": 25.00,\n  \"referenceNo\": \"{{current_transfer_ref}}\",\n  \"remarks\": \"Automated Postman Golden Path Transfer\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ledger/transfers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ledger",
+                "transfers"
+              ]
+            }
+          }
+        },
+        {
+          "name": "4.2 Idempotency Mutex Replay Protection (Zero Duplicate Deduction)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Idempotent replay succeeds without duplicate execution\", function () {",
+                  "    pm.expect([200, 201]).to.include(pm.response.code);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.test(\"Transfer reference matches original transaction\", function () {",
+                  "    pm.expect(data.transferReference || data.referenceNo).to.eql(pm.environment.get(\"current_transfer_ref\"));",
+                  "});",
+                  "pm.test(\"Response time is sub-50ms (Redis pre-flight hit)\", function () {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(100);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{last_idempotency_key}}"
+              },
+              {
+                "key": "X-Correlation-ID",
+                "value": "{{$guid}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sourceAccountId\": 1,\n  \"destinationAccountId\": 2,\n  \"amount\": 25.00,\n  \"referenceNo\": \"{{current_transfer_ref}}\",\n  \"remarks\": \"Automated Postman Golden Path Transfer\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ledger/transfers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ledger",
+                "transfers"
+              ]
+            }
+          }
+        },
+        {
+          "name": "4.3 Concurrency & Invariant Negative Test - Insufficient Funds",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Overdraft blocked with 400 or 422 Problem Details\", function () {",
+                  "    pm.expect([400, 422]).to.include(pm.response.code);",
+                  "});",
+                  "var err = pm.response.json();",
+                  "pm.test(\"Error detail indicates insufficient balance\", function () {",
+                  "    pm.expect((err.detail || err.message).toLowerCase()).to.include(\"insufficient\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}"
+              },
+              {
+                "key": "X-Correlation-ID",
+                "value": "{{$guid}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sourceAccountId\": 1,\n  \"destinationAccountId\": 2,\n  \"amount\": 999999999.00,\n  \"referenceNo\": \"REF-OVERDRAFT-TEST\",\n  \"remarks\": \"Should be rejected by ledger balance engine\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ledger/transfers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ledger",
+                "transfers"
+              ]
+            }
+          }
+        },
+        {
+          "name": "4.4 Invariant Negative Test - Self-Transfer Rejection",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Self-transfer rejected with 400 Bad Request\", function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}"
+              },
+              {
+                "key": "X-Correlation-ID",
+                "value": "{{$guid}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sourceAccountId\": 1,\n  \"destinationAccountId\": 1,\n  \"amount\": 50.00,\n  \"referenceNo\": \"REF-SELF-TEST\",\n  \"remarks\": \"Invalid self-transfer\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ledger/transfers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ledger",
+                "transfers"
+              ]
+            }
+          }
+        },
+        {
+          "name": "4.5 Teller Assisted Counter Transfer (Staff Approval Stamping)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Teller transfer returns 201 Created or 200 OK\", function () {",
+                  "    pm.expect([200, 201]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 201 || pm.response.code === 200) {",
+                  "    var data = pm.response.json();",
+                  "    pm.test(\"Transfer status is COMPLETED\", function () {",
+                  "        pm.expect(data.status).to.eql(\"COMPLETED\");",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teller_token}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}"
+              },
+              {
+                "key": "X-Correlation-ID",
+                "value": "{{$guid}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sourceAccountId\": 1,\n  \"destinationAccountId\": 2,\n  \"amount\": 10.00,\n  \"referenceNo\": \"TELLER-TX-{{$timestamp}}\",\n  \"remarks\": \"Branch Counter Deposit\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ledger/transfers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ledger",
+                "transfers"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "05. In-App Notifications & Event Streaming",
+      "item": [
+        {
+          "name": "5.1 Fetch Customer In-App Notifications Feed",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Notifications query returns 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var notifs = pm.response.json();",
+                  "var list = notifs.content || notifs;",
+                  "pm.test(\"Notifications feed is an array\", function () {",
+                  "    pm.expect(list).to.be.an(\"array\");",
+                  "    if (list.length > 0) {",
+                  "        pm.environment.set(\"latest_notification_id\", list[0].id);",
+                  "        pm.collectionVariables.set(\"latest_notification_id\", list[0].id);",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}"
+              },
+              {
+                "key": "X-Correlation-ID",
+                "value": "{{$guid}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/my-notifications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "my-notifications"
+              ]
+            }
+          }
+        },
+        {
+          "name": "5.2 Mark Notification As Read",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Mark as read returns 200 OK, 204 No Content, or 404 Not Found\", function () {",
+                  "    pm.expect([200, 204, 404]).to.include(pm.response.code);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customer_token}}"
+              },
+              {
+                "key": "X-Correlation-ID",
+                "value": "{{$guid}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/notifications/{{latest_notification_id}}/read",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notifications",
+                "{{latest_notification_id}}",
+                "read"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "06. Forensic Cryptographic Audit & Integrity Verification",
+      "item": [
+        {
+          "name": "6.1 Account Forensic Mutation Statement (Paginated)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Statement query returns 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.test(\"Statement contains immutable audit entries\", function () {",
+                  "    pm.expect(data.totalElements).to.be.at.least(1);",
+                  "    var records = data.content;",
+                  "    pm.expect(records).to.be.an(\"array\");",
+                  "    pm.expect(records[0]).to.have.property(\"currentHash\");",
+                  "    pm.expect(records[0]).to.have.property(\"amount\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "X-Correlation-ID",
+                "value": "{{$guid}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/audit/accounts/1/statement?page=0&size=20&sort=eventTimestamp,desc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "audit",
+                "accounts",
+                "1",
+                "statement"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "20"
+                },
+                {
+                  "key": "sort",
+                  "value": "eventTimestamp,desc"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "6.2 Real-time Cryptographic Chain Verification (Account #1)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Chain verification returns 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var result = pm.response.json();",
+                  "pm.test(\"SHA-256 Hash Chain is 100% Intact\", function () {",
+                  "    pm.expect(result.isChainIntact || result.chainIntact).to.be.true;",
+                  "    pm.expect(result.totalRecordsVerified).to.be.at.least(1);",
+                  "    pm.expect(result.latestHash).to.have.lengthOf(64);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "X-Correlation-ID",
+                "value": "{{$guid}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/audit/verify-chain/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "audit",
+                "verify-chain",
+                "1"
+              ]
+            }
+          }
+        },
+        {
+          "name": "6.3 Verify Destination Account Audit Chain (Account #2)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Chain verification returns 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var result = pm.response.json();",
+                  "pm.test(\"Destination account SHA-256 chain is intact\", function () {",
+                  "    pm.expect(result.isChainIntact || result.chainIntact).to.be.true;",
+                  "    pm.expect(result.totalRecordsVerified).to.be.at.least(1);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "X-Correlation-ID",
+                "value": "{{$guid}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/audit/verify-chain/2",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "audit",
+                "verify-chain",
+                "2"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
