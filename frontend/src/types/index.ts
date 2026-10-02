@@ -11,7 +11,7 @@ export interface AuthSession {
   userId: number;
   username: string;
   roles: string[];
-  userType: string;
+  userType: 'CUSTOMER' | 'TELLER' | 'ADMIN';
 }
 
 export interface Account {
@@ -95,3 +95,106 @@ export interface ChainVerificationResult {
   message: string;
 }
 
+// KYC Info & Requests
+export interface KycRecord {
+  kycId?: number;
+  customerId?: number;
+  firstName: string;
+  middleInitial?: string;
+  lastName: string;
+  address: string;
+  mobileNumber: string;
+  civilStatus: string;
+  occupation: string;
+  status: 'VERIFIED' | 'PENDING' | 'REJECTED';
+  createdAt?: string;
+}
+
+export interface CustomerProfile {
+  customerId: number;
+  username: string;
+  email: string;
+  kyc?: KycRecord;
+  kycStatus: string;
+  createdAt?: string;
+}
+
+export interface KycUpdateRequestDto {
+  newFirstName?: string;
+  newMiddleInitial?: string;
+  newLastName?: string;
+  newAddress?: string;
+  newMobileNumber?: string;
+  newCivilStatus?: string;
+  newOccupation?: string;
+}
+
+export interface KycRequestResponse {
+  kycRequestId: number;
+  kycId?: number;
+  customerId: number;
+  customerName?: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  approvedBy?: number;
+  requestedAt: string;
+  approvedAt?: string;
+  reviewedAt?: string;
+  rejectionReason?: string;
+  message?: string;
+  newFirstName?: string;
+  newMiddleInitial?: string;
+  newLastName?: string;
+  newAddress?: string;
+  newMobileNumber?: string;
+  newCivilStatus?: string;
+  newOccupation?: string;
+}
+
+// Account Closure
+export interface AccountClosureRequestDto {
+  reason?: string;
+}
+
+export interface ClosureRequestResponse {
+  closureRequestId: number;
+  accountId: number;
+  accountNumber?: string;
+  accountType?: string;
+  customerId?: number;
+  customerName?: string;
+  availableBalance?: number;
+  reason?: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  requestedAt: string;
+  reviewedAt?: string;
+  approvedBy?: number;
+  rejectionReason?: string;
+  accountStatus?: string;
+  message?: string;
+}
+
+// Account Flags / Holds
+export interface AccountFlag {
+  flagId: number;
+  accountId: number;
+  reason: string;
+  status: 'ACTIVE' | 'REMOVED';
+  flaggedBy: number;
+  removedBy?: number;
+  flaggedAt: string;
+  removedAt?: string;
+}
+
+// High Transaction Transfer (Dual-Control Approval)
+export interface PendingTransferItem {
+  transferRequestId: number;
+  sourceAccountId: number;
+  sourceAccountNumber?: string;
+  destinationAccountId: number;
+  destinationAccountNumber?: string;
+  amount: number;
+  referenceNo: string;
+  remarks?: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  requestedAt: string;
+}
